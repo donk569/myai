@@ -1,0 +1,14 @@
+{
+  "name": "dudu",
+  "version": "0.1.0",
+  "private": true,
+  "description": "嘟嘟 (Dudu) - 跨平台 AI 伙伴",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "desktop:dev": "electron-vite dev",
+    "desktop:build": "electron-vite build"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

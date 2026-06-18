@@ -1,0 +1,9 @@
+node_modules/
+dist/
+out/
+.env
+*.db
+*.db-journal
+.superpowers/
+.DS_Store
+Thumbs.db
