@@ -16,7 +16,9 @@
     "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
-      "@dudu/shared/*": ["shared/*/src"]
+      "@dudu/shared/*": ["shared/*/src"],
+      "@dudu/storage": ["shared/storage/src"],
+      "@dudu/character-system": ["shared/character-system/src"]
     }
   },
   "exclude": ["node_modules", "dist", "out"]
