@@ -19,7 +19,8 @@
       "@dudu/shared/*": ["shared/*/src"],
       "@dudu/storage": ["shared/storage/src"],
       "@dudu/character-system": ["shared/character-system/src"],
-      "@dudu/chat-engine": ["shared/chat-engine/src"]
+      "@dudu/chat-engine": ["shared/chat-engine/src"],
+      "@dudu/memory-system": ["shared/memory-system/src"]
     }
   },
   "exclude": ["node_modules", "dist", "out"]
