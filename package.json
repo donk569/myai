@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "嘟嘟 (Dudu) - 跨平台 AI 伙伴",
+  "main": "./out/main/index.js",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "desktop:dev": "electron-vite dev",
-    "desktop:build": "electron-vite build"
+    "desktop:build": "electron-vite build",
+    "desktop:preview": "electron-vite preview",
+    "desktop:start": "electron ."
   },
   "engines": {
     "node": ">=18"
@@ -14,8 +17,14 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.9.3",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
     "better-sqlite3": "^12.11.1",
-    "typescript": "^6.0.3"
+    "electron": "^30.0.0",
+    "electron-vite": "^2.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^5.4.0"
   },
   "dependencies": {
     "react": "^18.3.1",
