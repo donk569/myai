@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>嘟嘟 Demo — AI 桌面伙伴</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  background: linear-gradient(135deg, #fce4ec 0%, #fff5f7 40%, #f8bbd0 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* === 动画 === */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+@keyframes blink {
+  0%, 80%, 100% { transform: scaleY(1); }
+  85%, 95% { transform: scaleY(0.1); }
+}
+@keyframes earWiggle {
+  0%, 100% { transform: rotate(var(--rot)); }
+  50% { transform: rotate(calc(var(--rot) + 5deg)); }
+}
+@keyframes bellRing {
+  0%, 100% { transform: translateX(-50%) rotate(0); }
+  25% { transform: translateX(-50%) rotate(-15deg); }
+  75% { transform: translateX(-50%) rotate(15deg); }
+}
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@keyframes bubbleOut {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+}
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+  }
+
+  /* === 主布局 === */
+  .demo-container {
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+  padding: 40px;
+  }
+
+  /* === 悬浮球面板 === */
+  .ball-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(16px);
+  border-radius: 28px;
+  padding: 28px 24px;
+  box-shadow: 0 8px 40px rgba(240,98,146,0.15);
+  border: 1px solid rgba(244,143,177,0.25);
+  min-width: 180px;
+  }
+  .ball-panel h3 {
+  color: #c2185b;
+  font-size: 15px;
+  margin-bottom: 4px;
+  }
+
+  /* 嘟嘟角色 */
+  .dudu-face {
+  width: 90px; height: 90px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff5f7, #ffccbc, #ffab91);
+  box-shadow: 0 6px 30px rgba(255,138,101,0.35), inset 0 -4px 8px rgba(255,138,101,0.12), 0 0 0 3px rgba(255,255,255,0.35);
+  position: relative; overflow: visible;
+  animation: breathe 3s ease-in-out infinite, float 4s ease-in-out infinite;
+  cursor: pointer;
+  transition: box-shadow 0.3s;
+  }
+  .dudu-face:hover {
+  box-shadow: 0 8px 36px rgba(255,138,101,0.5), inset 0 -4px 8px rgba(255,138,101,0.12), 0 0 0 3px rgba(255,255,255,0.35);
+  }
+  .ear { position: absolute; top: -7px; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 18px solid #3a3a3a; border-radius: 40%; }
+  .ear-l { left: 15px; transform: rotate(-15deg); --rot: -15deg; }
+  .ear-r { right: 15px; transform: rotate(15deg); --rot: 15deg; }
+  .ear-inner { position: absolute; top: 3px; left: -5px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 10px solid #f48fb1; border-radius: 40%; }
+  .hair { position: absolute; top: 8px; left: 14%; width: 72%; height: 20px; background: #4a2c2a; border-radius: 60% 60% 0 0; }
+  .eye { position: absolute; top: 26px; width: 4px; height: 4px; background: #3e2723; border-radius: 50%; animation: blink 4s ease-in-out infinite; }
+  .eye-l { left: 27px; } .eye-r { right: 27px; }
+  .eye::after { content: ''; position: absolute; top: 1px; left: 1px; width: 1.5px; height: 1.5px; background: white; border-radius: 50%; }
+  .blush { position: absolute; top: 33px; width: 11px; height: 5px; background: #f48fb1; border-radius: 50%; opacity: 0.45; }
+  .blush-l { left: 9px; } .blush-r { right: 9px; }
+  .nose-dot { position: absolute; top: 33px; left: 50%; transform: translateX(-50%); width: 3px; height: 2px; background: #f48fb1; border-radius: 50%; }
+  .mouth-dot { position: absolute; top: 39px; left: 50%; transform: translateX(-50%); font-size: 9px; color: #e57373; }
+  .collar-band { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); width: 30px; height: 5px; background: #e91e63; border-radius: 3px; }
+  .bell-dot { position: absolute; bottom: 11px; left: 50%; transform: translateX(-50%); width: 7px; height: 7px; background: radial-gradient(circle at 40% 35%, #fff9c4, #ffd54f, #ffb300); border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+
+  /* 搭话气泡 */
+  .proactive-bubble {
+  position: relative;
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  padding: 10px 16px;
+  max-width: 220px;
+  font-size: 13px;
+  color: #5d4037;
+  box-shadow: 0 4px 20px rgba(240,98,146,0.2);
+  border: 1px solid rgba(244,143,177,0.3);
+  text-align: center;
+  line-height: 1.5;
+  animation: bubbleIn 0.5s ease-out forwards;
+  cursor: pointer;
+  }
+  .proactive-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 7px solid rgba(255,255,255,0.95);
+  }
+
+  /* 表情按钮 */
+  .expr-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+  .expr-btn {
+  padding: 5px 12px;
+  border: 1.5px solid rgba(244,143,177,0.4);
+  background: rgba(255,255,255,0.6);
+  border-radius: 16px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #c2185b;
+  transition: all 0.2s;
+  font-family: inherit;
+  }
+  .expr-btn:hover { background: #f8bbd0; color: #fff; border-color: #f8bbd0; }
+  .expr-btn.active { background: linear-gradient(135deg, #f8bbd0, #f06292); color: #fff; border-color: transparent; }
+
+  /* === 聊天窗 === */
+  .chat-panel {
+  width: 380px; height: 560px;
+  background: rgba(255,245,247,0.92);
+  backdrop-filter: blur(20px);
+  border-radius: 22px;
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  border: 1px solid rgba(244,143,177,0.3);
+  box-shadow: 0 12px 48px rgba(240,98,146,0.2);
+  }
+  .chat-header {
+  background: linear-gradient(135deg, #f8bbd0, #f48fb1);
+  padding: 12px 16px;
+  display: flex; align-items: center; gap: 10px;
+  }
+  .chat-avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff5f7, #f48fb1);
+  display: flex; align-items: center; justify-content: center; font-size: 15px;
+  }
+  .chat-header-title { color: #fff; font-size: 14px; font-weight: 600; }
+  .chat-header-status { color: rgba(255,255,255,0.7); font-size: 10px; margin-left: auto; }
+  .chat-msgs {
+  flex: 1; overflow-y: auto; padding: 16px;
+  display: flex; flex-direction: column; gap: 12px;
+  }
+  .chat-msgs::-webkit-scrollbar { width: 4px; }
+  .chat-msgs::-webkit-scrollbar-thumb { background: rgba(244,143,177,0.3); border-radius: 4px; }
+  .msg-row { display: flex; gap: 8px; align-items: flex-end; animation: msgIn 0.3s ease-out; }
+  .msg-row.user { flex-direction: row-reverse; }
+  .msg-avatar {
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  background: radial-gradient(circle at 35% 30%, #fff5f7, #f48fb1);
+  display: flex; align-items: center; justify-content: center; font-size: 11px;
+  }
+  .msg-bubble {
+  max-width: 70%; padding: 10px 14px; font-size: 13px; line-height: 1.6;
+  word-break: break-word;
+  }
+  .msg-bubble.ai {
+  background: white; color: #5d4037;
+  border-radius: 14px 14px 14px 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .msg-bubble.user {
+  background: linear-gradient(135deg, #f8bbd0, #f48fb1);
+  color: white;
+  border-radius: 14px 14px 4px 14px;
+  }
+  .msg-time { font-size: 10px; color: #bcaaa4; margin-top: 2px; padding: 0 4px; }
+  .msg-row.user .msg-time { text-align: right; }
+
+  .chat-input-area {
+  padding: 10px 14px;
+  border-top: 1px solid rgba(244,143,177,0.2);
+  background: rgba(255,255,255,0.5);
+  display: flex; gap: 8px; align-items: flex-end;
+  }
+  .chat-input-wrap {
+  flex: 1;
+  background: rgba(248,187,208,0.12);
+  border-radius: 20px;
+  padding: 7px 14px;
+  display: flex; align-items: center;
+  }
+  .chat-textarea {
+  flex: 1; border: none; outline: none; background: transparent;
+  font-size: 13px; color: #5d4037; resize: none;
+  font-family: inherit; line-height: 1.4;
+  max-height: 80px;
+  }
+  .chat-textarea::placeholder { color: #bcaaa4; }
+  .send-btn {
+  width: 34px; height: 34px; border-radius: 50%; border: none;
+  background: linear-gradient(135deg, #f8bbd0, #f06292);
+  color: #fff; font-size: 14px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; flex-shrink: 0;
+  }
+  .send-btn:hover { transform: scale(1.05); }
+  .send-btn:disabled { background: #e0e0e0; cursor: not-allowed; transform: none; }
+
+  .loading-dot {
+  display: inline-flex; gap: 4px; align-items: center; color: #f48fb1; font-size: 13px;
+  }
+  .loading-dot span { animation: blink 1.4s ease-in-out infinite; }
+  .loading-dot span:nth-child(2) { animation-delay: 0.2s; }
+  .loading-dot span:nth-child(3) { animation-delay: 0.4s; }
+
+  /* === 提示 === */
+  .info-banner {
+  position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+  background: rgba(255,255,255,0.85); backdrop-filter: blur(10px);
+  padding: 8px 20px; border-radius: 20px;
+  font-size: 11px; color: #8d6e63;
+  border: 1px solid rgba(244,143,177,0.2);
+  }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, createElement: h, Fragment } = React;
+
+// ========== 嘟嘟角色 ==========
+const expressions = {
+  normal: { mouth: 'ω', blush: 0.45 },
+  smile: { mouth: '◡', blush: 0.55, eyeCurve: '50% 50% 10% 10%' },
+  thinking: { mouth: '~', blush: 0.4 },
+  surprised: { mouth: '○', blush: 0.5, eyeH: 5, eyeRound: '50%' },
+  sleepy: { mouth: '~', blush: 0.3, eyeH: 2, eyeCurve: '50% 50% 10% 10%' },
+  excited: { mouth: '▽', blush: 0.7, eyeH: 5, eyeRound: '50%', bell: true },
+};
+
+function DuduCharacter({ expression = 'normal', onClick }) {
+  const e = expressions[expression] || expressions.normal;
+  return h('div', { className: 'dudu-face', onClick, title: '点击和嘟嘟聊天~' },
+    h('div', { className: 'ear ear-l' }, h('div', { className: 'ear-inner' })),
+    h('div', { className: 'ear ear-r' }, h('div', { className: 'ear-inner' })),
+    h('div', { className: 'hair' }),
+    h('div', { className: 'eye eye-l',
+      style: { height: (e.eyeH||4)+'px', borderRadius: e.eyeRound||e.eyeCurve||'50%' } }),
+    h('div', { className: 'eye eye-r',
+      style: { height: (e.eyeH||4)+'px', borderRadius: e.eyeRound||e.eyeCurve||'50%' } }),
+    h('div', { className: 'blush blush-l', style: { opacity: e.blush } }),
+    h('div', { className: 'blush blush-r', style: { opacity: e.blush } }),
+    h('div', { className: 'nose-dot' }),
+    h('div', { className: 'mouth-dot' }, e.mouth),
+    h('div', { className: 'collar-band' }),
+    h('div', {
+      className: 'bell-dot',
+      style: e.bell ? { animation: 'bellRing 0.3s ease-in-out 3' } : {}
+    }),
+  );
+}
+
+// ========== 聊天消息气泡 ==========
+function ChatMessage({ msg }) {
+  const isUser = msg.role === 'user';
+  const time = new Date(msg.time).toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' });
+  return h('div', { className: 'msg-row ' + (isUser ? 'user' : 'ai') },
+    !isUser && h('div', { className: 'msg-avatar' }, '🐱'),
+    h('div', {},
+      h('div', { className: 'msg-bubble ' + (isUser ? 'user' : 'ai') }, msg.content),
+      h('div', { className: 'msg-time' }, time),
+    ),
+  );
+}
+
+// ========== 主应用 ==========
+function App() {
+  const [expression, setExpression] = useState('normal');
+  const [bubble, setBubble] = useState(null);
+  const [messages, setMessages] = useState([
+    { id: 1, role: 'assistant', content: '你好呀~ 我是嘟嘟！你的AI桌面伙伴 🐱💕', time: Date.now() - 120000 },
+    { id: 2, role: 'user', content: '你好嘟嘟！', time: Date.now() - 60000 },
+    { id: 3, role: 'assistant', content: '今天有什么想聊的吗？喵~ 我可以陪你聊天、记住你说的话，还会关心你哦！🌸', time: Date.now() - 30000 },
+  ]);
+  const [inputText, setInputText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const msgEndRef = useRef(null);
+
+  useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
+
+  const proactiveMessages = [
+    '今天天气真好呀，要记得多喝水哦~ ☀️',
+    '喵~ 嘟嘟在这里！有什么需要帮忙的吗？💕',
+    '休息一下眼睛吧，看了屏幕好久了~ 👀',
+    '你看起来心情不错！有什么开心的事吗？✨',
+    '夜深了，早点休息哦~ 🌙',
+  ];
+
+  const showBubble = () => {
+    const msg = proactiveMessages[Math.floor(Math.random() * proactiveMessages.length)];
+    setExpression('excited');
+    setBubble(msg);
+    setTimeout(() => {
+      setBubble(null);
+      setExpression('normal');
+    }, 6000);
+  };
+
+  const handleSend = () => {
+    const text = inputText.trim();
+    if (!text || loading) return;
+
+    const userMsg = { id: Date.now(), role: 'user', content: text, time: Date.now() };
+    setMessages(prev => [...prev, userMsg]);
+    setInputText('');
+    setLoading(true);
+    setExpression('thinking');
+
+    // 模拟 AI 回复
+    const replies = [
+      '是呀！我也有同感~ 喵~ 🐱',
+      '嗯嗯，你说的很有道理呢！💕',
+      '哈哈，和你聊天真开心~ 还有什么想聊的吗？✨',
+      '原来如此！嘟嘟记住了~ 以后可以提醒你！📝',
+      '哇，好有意思！继续说下去~ 我在认真听着呢！👂',
+      '这个我知道！要不要深入聊聊这个话题？🌸',
+      '有趣！作为你的AI伙伴，我会记住这些的~ 🎀',
+    ];
+    const reply = replies[Math.floor(Math.random() * replies.length)];
+
+    setTimeout(() => {
+      const aiMsg = { id: Date.now()+1, role: 'assistant', content: reply, time: Date.now() };
+      setMessages(prev => [...prev, aiMsg]);
+      setLoading(false);
+      setExpression('smile');
+      setTimeout(() => setExpression('normal'), 2000);
+    }, 1500 + Math.random() * 1500);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+  };
+
+  const exprList = ['normal', 'smile', 'thinking', 'surprised', 'sleepy', 'excited'];
+
+  return h('div', { className: 'demo-container' },
+    // 左侧：悬浮球面板
+    h('div', { className: 'ball-panel' },
+      h('h3', {}, '🎀 嘟嘟'),
+      h('div', { style: { position: 'relative' } },
+        bubble && h('div', {
+          className: 'proactive-bubble',
+          onClick: () => setBubble(null),
+        }, bubble),
+        h(DuduCharacter, { expression, onClick: showBubble }),
+      ),
+      h('div', { className: 'expr-btns' },
+        exprList.map(key =>
+          h('button', {
+            key,
+            className: 'expr-btn' + (expression === key ? ' active' : ''),
+            onClick: () => setExpression(key),
+          },
+            key === 'normal' ? '😊普通' :
+            key === 'smile' ? '😄微笑' :
+            key === 'thinking' ? '🤔思考' :
+            key === 'surprised' ? '😲惊讶' :
+            key === 'sleepy' ? '😴困困' : '🎉兴奋'
+          )
+        ),
+        h('button', { className: 'expr-btn', onClick: showBubble }, '💬 搭话'),
+      ),
+    ),
+
+    // 右侧：聊天窗
+    h('div', { className: 'chat-panel' },
+      // 头部
+      h('div', { className: 'chat-header' },
+        h('div', { className: 'chat-avatar' }, '🐱'),
+        h('span', { className: 'chat-header-title' }, '嘟嘟'),
+        h('span', { className: 'chat-header-status' }, '🟢 在线'),
+      ),
+      // 消息列表
+      h('div', { className: 'chat-msgs' },
+        messages.map(msg => h(ChatMessage, { key: msg.id, msg })),
+        loading && h('div', { className: 'msg-row ai' },
+          h('div', { className: 'msg-avatar' }, '🐱'),
+          h('div', { className: 'msg-bubble ai' },
+            h('span', { className: 'loading-dot' },
+              h('span', {}, '.'), h('span', {}, '.'), h('span', {}, '.'),
+            ),
+          ),
+        ),
+        h('div', { ref: msgEndRef }),
+      ),
+      // 输入区
+      h('div', { className: 'chat-input-area' },
+        h('div', { className: 'chat-input-wrap' },
+          h('textarea', {
+            className: 'chat-textarea',
+            rows: 1,
+            value: inputText,
+            onChange: e => setInputText(e.target.value),
+            onKeyDown: handleKeyDown,
+            placeholder: '说点什么...',
+            disabled: loading,
+          }),
+        ),
+        h('button', {
+          className: 'send-btn',
+          onClick: handleSend,
+          disabled: !inputText.trim() || loading,
+        }, loading ? '⋯' : '➤'),
+      ),
+    ),
+    h('div', { className: 'info-banner' },
+      '🐱 嘟嘟 Demo — 浏览器预览版。完整功能需启动 Electron 桌面应用。',
+    ),
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+</script>
+</body>
+</html>
