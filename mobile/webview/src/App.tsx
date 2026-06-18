@@ -7,6 +7,126 @@ import { callNative, setupBridgeCallbacks } from './bridge/native';
 // 初始化桥接回调
 setupBridgeCallbacks();
 
+// === DeepSeek 流式请求（WebView 内直接 fetch） ===
+interface StreamCallbacks {
+  onToken: (token: string) => void;
+  onComplete: (fullContent: string) => void;
+  onError: (error: string) => void;
+}
+
+async function streamDeepSeek(
+  apiKey: string,
+  apiBaseUrl: string,
+  messages: Array<{ role: string; content: string }>,
+  callbacks: StreamCallbacks,
+  signal?: AbortSignal,
+): Promise<void> {
+  try {
+    const response = await fetch(`${apiBaseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages,
+        temperature: 0.8,
+        max_tokens: 2048,
+        stream: true,
+      }),
+      signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      if (response.status === 401) throw new Error('API Key 无效，请检查设置');
+      if (response.status === 429) throw new Error('请求过于频繁，请稍后重试');
+      throw new Error(`API 错误 (${response.status}): ${text}`);
+    }
+
+    if (!response.body) throw new Error('响应体为空');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullContent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data: ')) continue;
+
+        const data = trimmed.slice(6);
+        if (data === '[DONE]') {
+          callbacks.onComplete(fullContent);
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(data) as {
+            choices: Array<{ delta: { content?: string }; finish_reason: string | null }>;
+          };
+          for (const choice of parsed.choices) {
+            const token = choice.delta.content || '';
+            if (token) {
+              fullContent += token;
+              callbacks.onToken(token);
+            }
+          }
+        } catch { /* skip unparseable lines */ }
+      }
+    }
+
+    callbacks.onComplete(fullContent);
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      callbacks.onError('请求已取消');
+      return;
+    }
+    callbacks.onError((error as Error).message || '请求失败');
+  }
+}
+
+// === 构建 System Prompt（移动端版本，不依赖 Node.js 模块） ===
+function buildMobileSystemPrompt(
+  character: { name: string; personality: string; speakingStyle: string },
+  memories: Array<{ type: string; content: string }>,
+): { role: 'system'; content: string } {
+  const memoryText = memories.length > 0
+    ? '\n## 你记得关于用户的事情\n' + memories.map(m => `- [${m.type}] ${m.content}`).join('\n')
+    : '';
+
+  return {
+    role: 'system',
+    content: `你叫${character.name}，是一个AI桌面伙伴。
+
+## 你是谁
+${character.personality}
+
+## 说话风格
+${character.speakingStyle}
+
+## 当前时间
+${new Date().toLocaleString('zh-CN')}
+${memoryText}
+
+## 行为准则
+- 你是用户的朋友，不是助手。自然地聊天。
+- 用中文回复，回复简洁，一般不超过200字。
+- 主动关心用户，但不过度。
+- 记住用户说的话，以后可以提起。`,
+  };
+}
+
+// === App 组件 ===
 const App: React.FC = () => {
   const {
     messages, loading, streamingContent,
@@ -19,11 +139,11 @@ const App: React.FC = () => {
   } = useConversations();
 
   const [ready, setReady] = useState(false);
+  const abortRef = React.useRef<AbortController | null>(null);
 
   // 加载对话列表
   useEffect(() => {
-    loadConversations();
-    setReady(true);
+    loadConversations().then(() => setReady(true));
   }, []);
 
   const loadConversations = async () => {
@@ -36,9 +156,7 @@ const App: React.FC = () => {
         setConversations(result.rows);
         if (result.rows.length > 0) selectConversation(result.rows[0].id);
       }
-    } catch {
-      // 首次使用，无数据
-    }
+    } catch { /* 首次使用 */ }
   };
 
   const loadMessages = async (convId: string) => {
@@ -53,14 +171,17 @@ const App: React.FC = () => {
     }
   };
 
-  // 切换对话加载消息
+  // 切换对话
   useEffect(() => {
     if (!selectedId) { clearMessages(); return; }
     loadMessages(selectedId);
   }, [selectedId]);
 
+  // 发送消息 — 完整 DeepSeek 流式对话
   const handleSend = useCallback(async (content: string) => {
     if (!selectedId) return;
+
+    // 1. 保存用户消息
     const userMsg: Message = {
       id: crypto.randomUUID(),
       conversationId: selectedId,
@@ -70,15 +191,82 @@ const App: React.FC = () => {
     };
     addMessage(userMsg);
 
-    // 保存用户消息到本地数据库
     await callNative('storage.query', {
       sql: 'INSERT INTO messages (id, conversation_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)',
       args: [userMsg.id, selectedId, 'user', content, String(Date.now())],
     });
 
-    // TODO: 调 DeepSeek API（复用 chat-engine 的逻辑）
-    // 这里简化处理，实际应通过 JSBridge 调用 Kotlin 侧的 HTTP 客户端
-  }, [selectedId]);
+    // 2. 获取 API 配置 + 角色 + 记忆
+    const [apiConfig, character, memoriesResult] = await Promise.all([
+      callNative('chat.getConfig', {}).catch(() => ({ apiKey: '', base_url: 'https://api.deepseek.com' })) as Promise<Record<string, string>>,
+      callNative('character.get', {}).catch(() => ({
+        name: '嘟嘟', personality: '可爱的AI伙伴', speakingStyle: '亲切自然',
+      })) as Promise<{ name: string; personality: string; speakingStyle: string }>,
+      callNative('storage.query', {
+        sql: 'SELECT type, content FROM memories ORDER BY confidence DESC LIMIT 10',
+        args: [],
+      }).catch(() => ({ rows: [] })) as Promise<{ rows: Array<{ type: string; content: string }> }>,
+    ]);
+
+    const apiKey = apiConfig.apiKey || apiConfig.api_key || '';
+    const apiBaseUrl = apiConfig.base_url || 'https://api.deepseek.com';
+
+    if (!apiKey) {
+      setError('请先在设置中配置 DeepSeek API Key');
+      return;
+    }
+
+    // 3. 构建消息列表
+    const systemMsg = buildMobileSystemPrompt(character, memoriesResult.rows || []);
+    const messagesForAPI = [
+      systemMsg,
+      ...(messages.slice(-20).map(m => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }))),
+      { role: 'user' as const, content },
+    ];
+
+    // 4. 流式请求
+    const abortController = new AbortController();
+    abortRef.current = abortController;
+
+    let fullContent = '';
+    await streamDeepSeek(apiKey, apiBaseUrl, messagesForAPI, {
+      onToken: (token) => {
+        fullContent += token;
+        appendStreamToken(token);
+      },
+      onComplete: async () => {
+        const aiMsg: Message = {
+          id: crypto.randomUUID(),
+          conversationId: selectedId,
+          role: 'assistant',
+          content: fullContent,
+          timestamp: Date.now(),
+        };
+        commitStream(aiMsg);
+
+        // 保存 AI 回复到 DB
+        await callNative('storage.query', {
+          sql: 'INSERT INTO messages (id, conversation_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)',
+          args: [aiMsg.id, selectedId, 'assistant', fullContent, String(Date.now())],
+        });
+
+        // 更新对话时间
+        await callNative('storage.query', {
+          sql: 'UPDATE conversations SET updated_at = ? WHERE id = ?',
+          args: [String(Date.now()), selectedId],
+        });
+
+        abortRef.current = null;
+      },
+      onError: (error) => {
+        setError(error);
+        abortRef.current = null;
+      },
+    }, abortController.signal);
+  }, [selectedId, messages, addMessage, appendStreamToken, commitStream, setError]);
 
   const handleCreateConv = useCallback(async () => {
     const id = crypto.randomUUID();
@@ -86,14 +274,17 @@ const App: React.FC = () => {
     await callNative('storage.query', {
       sql: 'INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)',
       args: [id, '新对话', String(now), String(now)],
-    });
+    }).catch(() => {});
     const conv: Conversation = { id, title: '新对话', createdAt: now, updatedAt: now };
     addConversation(conv);
     selectConversation(id);
   }, []);
 
   const handleDeleteConv = useCallback(async (id: string) => {
-    await callNative('storage.delete', { key: id });
+    await callNative('storage.query', {
+      sql: 'DELETE FROM conversations WHERE id = ?',
+      args: [id],
+    }).catch(() => {});
     deleteConversation(id);
   }, []);
 
@@ -111,7 +302,8 @@ const App: React.FC = () => {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', height: '100vh',
-      background: '#fff5f7', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      background: '#fff5f7',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     }}>
       {/* 头部 */}
       <div style={{

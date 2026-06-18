@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { MessageBubble, ChatInput, ConversationList } from '@dudu/chat-ui';
 import { useChat, useConversations } from '@dudu/chat-ui';
 import type { Message, Conversation } from '@dudu/chat-ui';
@@ -19,6 +19,8 @@ const App: React.FC = () => {
   } = useConversations();
 
   const [ready, setReady] = useState(false);
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
 
   // 初始化
   useEffect(() => {
@@ -36,20 +38,20 @@ const App: React.FC = () => {
     api?.loadMessages(selectedId).then((msgs) => setMessages(msgs as Message[]));
   }, [selectedId]);
 
-  // 流式响应
+  // 流式响应（注册一次，通过 ref 获取当前 conversationId）
   useEffect(() => {
     api?.onStreamToken((token: string) => appendStreamToken(token));
     api?.onStreamComplete((data: { messageId: string; content: string }) => {
       commitStream({
         id: data.messageId,
-        conversationId: selectedId || '',
+        conversationId: selectedIdRef.current || '',
         role: 'assistant',
         content: data.content,
         timestamp: Date.now(),
       });
     });
     api?.onStreamError((err: string) => setError(err));
-  }, [selectedId]);
+  }, []);
 
   const handleSend = useCallback((content: string) => {
     if (!selectedId) return;

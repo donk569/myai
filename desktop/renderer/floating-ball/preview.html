@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>嘟嘟 — 角色预览</title>
+<link rel="stylesheet" href="./floating-ball.css">
+<style>
+  body {
+    background: linear-gradient(135deg, #fce4ec, #fff5f7, #f8bbd0);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  h1 { color: #c2185b; margin-bottom: 4px; font-size: 24px; }
+  .subtitle { color: #f48fb1; margin-bottom: 30px; font-size: 14px; }
+  .char-wrapper {
+    width: 120px; height: 120px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.5);
+    border-radius: 50%;
+    box-shadow: 0 8px 40px rgba(240,98,146,0.2);
+    margin-bottom: 24px;
+  }
+  .expr-grid {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    max-width: 500px;
+  }
+  .expr-btn {
+    padding: 8px 18px;
+    border: 2px solid rgba(244,143,177,0.4);
+    background: rgba(255,255,255,0.7);
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #c2185b;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .expr-btn:hover { background: #f8bbd0; color: #fff; border-color: #f8bbd0; }
+  .expr-btn.active { background: linear-gradient(135deg, #f8bbd0, #f06292); color: #fff; border-color: transparent; }
+
+  /* Inline the Character CSS since we can't import React */
+  .cat-face {
+    width: 100px; height: 100px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fff5f7, #ffccbc, #ffab91);
+    box-shadow: 0 4px 24px rgba(255,138,101,0.35), inset 0 -4px 8px rgba(255,138,101,0.15), 0 0 0 3px rgba(255,255,255,0.3);
+    position: relative; overflow: hidden;
+    animation: breathe 3s ease-in-out infinite;
+  }
+  .ear-l, .ear-r {
+    position: absolute; top: -8px; width: 0; height: 0;
+    border-left: 12px solid transparent; border-right: 12px solid transparent;
+    border-bottom: 20px solid #3a3a3a; border-radius: 40%;
+    transition: transform 0.2s ease;
+  }
+  .ear-l { left: 18px; transform: rotate(-15deg); }
+  .ear-r { right: 18px; transform: rotate(15deg); }
+  .ear-l.wiggle { transform: rotate(-15deg) scale(1.05); }
+  .ear-r.wiggle { transform: rotate(15deg) scale(1.05); }
+  .ear-inner-l, .ear-inner-r {
+    position: absolute; top: 4px; left: -6px; width: 0; height: 0;
+    border-left: 6px solid transparent; border-right: 6px solid transparent;
+    border-bottom: 11px solid #f48fb1; border-radius: 40%;
+  }
+  .hair {
+    position: absolute; top: 8px; left: 15%; width: 70%; height: 24px;
+    background: #4a2c2a; border-radius: 60% 60% 0 0;
+  }
+  .eyes {
+    position: absolute; top: 28px; width: 100%;
+    display: flex; justify-content: center; gap: 16px;
+  }
+  .eye {
+    width: 5px; height: 4px; background: #3e2723;
+    border-radius: 50%; position: relative; transition: all 0.15s;
+  }
+  .eye.blink { height: 0.5px; border-radius: 0%; }
+  .eye.smile { border-radius: 50% 50% 10% 10%; }
+  .eye.surprised, .eye.excited { height: 5px; border-radius: 50%; box-shadow: 0 0 6px rgba(255,255,200,0.6); }
+  .eye.sleepy { height: 2px; border-radius: 50% 50% 10% 10%; }
+  .highlight {
+    position: absolute; top: 1px; left: 1px;
+    width: 2px; height: 2px; background: white; border-radius: 50%;
+  }
+  .highlight2 {
+    position: absolute; top: 3px; left: 3px;
+    width: 1px; height: 1px; background: white; border-radius: 50%;
+  }
+  .blush-l, .blush-r {
+    position: absolute; top: 36px; width: 12px; height: 6px;
+    background: #f48fb1; border-radius: 50%; transition: opacity 0.3s;
+  }
+  .blush-l { left: 10px; opacity: 0.45; }
+  .blush-r { right: 10px; opacity: 0.45; }
+  .nose {
+    position: absolute; top: 36px; left: 50%; transform: translateX(-50%);
+    width: 3px; height: 2px; background: #f48fb1; border-radius: 50%;
+  }
+  .mouth {
+    position: absolute; top: 42px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; color: #e57373; transition: all 0.2s;
+  }
+  .whisker {
+    position: absolute; top: 40px; height: 1px; background: #bcaaa4;
+    border-radius: 1px; opacity: 0.5;
+  }
+  .collar {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    width: 32px; height: 5px; background: #e91e63; border-radius: 3px;
+  }
+  .bell {
+    position: absolute; bottom: 13px; left: 50%; transform: translateX(-50%);
+    width: 8px; height: 8px;
+    background: radial-gradient(circle at 40% 35%, #fff9c4, #ffd54f, #ffb300);
+    border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+  .bell.ring { animation: bellRing 0.3s ease-in-out 3; }
+  .ahoge {
+    position: absolute; top: -10px; left: 50%;
+    width: 2px; height: 14px; background: #4a2c2a; border-radius: 50%;
+    transform-origin: bottom;
+    animation: ahoge 0.5s ease-in-out infinite;
+  }
+  .think-bubble {
+    position: absolute; top: -12px; right: -6px;
+    font-size: 14px; color: #f48fb1; opacity: 0.8;
+    animation: thinkingFloat 1.5s ease-in-out infinite;
+  }
+
+  .preview-bubble {
+    position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translateX(-50%);
+    background: rgba(255,255,255,0.95); backdrop-filter: blur(12px);
+    border-radius: 16px; padding: 10px 16px; max-width: 200px; font-size: 13px;
+    color: #5d4037; box-shadow: 0 4px 20px rgba(240,98,146,0.2);
+    border: 1px solid rgba(244,143,177,0.3); text-align: center;
+    line-height: 1.5; animation: bubbleFadeIn 0.5s ease-out forwards;
+  }
+  .preview-bubble::after {
+    content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+    width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent;
+    border-top: 7px solid rgba(255,255,255,0.95);
+  }
+</style>
+</head>
+<body>
+<h1>🎀 嘟嘟</h1>
+<p class="subtitle">Q版猫耳发箍女孩 — 角色预览</p>
+
+<div style="position: relative; margin-bottom: 30px;">
+  <div id="proactiveBubble" style="display:none;" class="preview-bubble"></div>
+  <div class="char-wrapper">
+    <div id="character" class="cat-face">
+      <div class="ear-l" id="earL"><div class="ear-inner-l"></div></div>
+      <div class="ear-r" id="earR"><div class="ear-inner-r"></div></div>
+      <div class="hair"></div>
+      <div class="eyes">
+        <div class="eye" id="eyeL"><div class="highlight"></div><div class="highlight2"></div></div>
+        <div class="eye" id="eyeR"><div class="highlight"></div><div class="highlight2"></div></div>
+      </div>
+      <div class="blush-l"></div><div class="blush-r"></div>
+      <div class="nose"></div>
+      <div class="mouth" id="mouth">ω</div>
+      <div class="whisker" style="left:-4px;width:16px;transform:rotate(-8deg);"></div>
+      <div class="whisker" style="left:-4px;width:14px;top:43px;"></div>
+      <div class="whisker" style="right:-4px;width:16px;transform:rotate(8deg);top:40px;"></div>
+      <div class="whisker" style="right:-4px;width:14px;top:43px;"></div>
+      <div class="collar"></div>
+      <div class="bell" id="bell"></div>
+      <div id="ahoge" style="display:none;" class="ahoge"></div>
+      <div id="thinkBubble" style="display:none;" class="think-bubble">?</div>
+    </div>
+  </div>
+</div>
+
+<div class="expr-grid">
+  <button class="expr-btn active" onclick="setExpression('normal')">😊 普通</button>
+  <button class="expr-btn" onclick="setExpression('smile')">😄 微笑</button>
+  <button class="expr-btn" onclick="setExpression('thinking')">🤔 思考</button>
+  <button class="expr-btn" onclick="setExpression('surprised')">😲 惊讶</button>
+  <button class="expr-btn" onclick="setExpression('sleepy')">😴 困困</button>
+  <button class="expr-btn" onclick="setExpression('excited')">🎉 兴奋</button>
+  <button class="expr-btn" onclick="showBubble()">💬 搭话气泡</button>
+</div>
+
+<script>
+let currentExpression = 'normal';
+const eyeL = document.getElementById('eyeL');
+const eyeR = document.getElementById('eyeR');
+const mouth = document.getElementById('mouth');
+const bell = document.getElementById('bell');
+const ahoge = document.getElementById('ahoge');
+const thinkBubble = document.getElementById('thinkBubble');
+const proactiveBubble = document.getElementById('proactiveBubble');
+
+// 自动眨眼
+setInterval(() => {
+  eyeL.classList.add('blink'); eyeR.classList.add('blink');
+  setTimeout(() => { eyeL.classList.remove('blink'); eyeR.classList.remove('blink'); }, 150);
+}, 3000);
+
+// 猫耳偶尔抖动
+setInterval(() => {
+  document.getElementById('earL').classList.add('wiggle');
+  document.getElementById('earR').classList.add('wiggle');
+  setTimeout(() => {
+    document.getElementById('earL').classList.remove('wiggle');
+    document.getElementById('earR').classList.remove('wiggle');
+  }, 400);
+}, 5000);
+
+function setExpression(expr) {
+  currentExpression = expr;
+  // 重置
+  eyeL.className = 'eye'; eyeR.className = 'eye';
+  mouth.textContent = 'ω';
+  bell.classList.remove('ring');
+  ahoge.style.display = 'none';
+  thinkBubble.style.display = 'none';
+  proactiveBubble.style.display = 'none';
+  document.getElementById('character').style.boxShadow =
+    '0 4px 24px rgba(255,138,101,0.35), inset 0 -4px 8px rgba(255,138,101,0.15), 0 0 0 3px rgba(255,255,255,0.3)';
+
+  switch(expr) {
+    case 'smile':
+      eyeL.classList.add('smile'); eyeR.classList.add('smile');
+      mouth.textContent = '◡';
+      break;
+    case 'thinking':
+      mouth.textContent = '~';
+      thinkBubble.style.display = 'block';
+      break;
+    case 'surprised':
+      eyeL.classList.add('surprised'); eyeR.classList.add('surprised');
+      mouth.textContent = '○';
+      break;
+    case 'sleepy':
+      eyeL.classList.add('sleepy'); eyeR.classList.add('sleepy');
+      mouth.textContent = '~';
+      break;
+    case 'excited':
+      eyeL.classList.add('excited'); eyeR.classList.add('excited');
+      mouth.textContent = '▽';
+      bell.classList.add('ring');
+      ahoge.style.display = 'block';
+      break;
+  }
+
+  // 更新按钮状态
+  document.querySelectorAll('.expr-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+function showBubble() {
+  const messages = [
+    '今天天气真好呀~ ☀️',
+    '要喝点水休息一下哦！💧',
+    '喵~ 嘟嘟在这里！🐱',
+    '你有什么想聊的吗？💕',
+  ];
+  proactiveBubble.textContent = messages[Math.floor(Math.random() * messages.length)];
+  proactiveBubble.style.display = 'block';
+  proactiveBubble.style.animation = 'none';
+  proactiveBubble.offsetHeight;
+  proactiveBubble.style.animation = 'bubbleFadeIn 0.5s ease-out forwards';
+  setExpression('excited');
+  setTimeout(() => {
+    proactiveBubble.style.animation = 'bubbleFadeOut 1s ease-in forwards';
+    setTimeout(() => { proactiveBubble.style.display = 'none'; setExpression('normal'); }, 1000);
+  }, 5000);
+}
+</script>
+</body>
+</html>
