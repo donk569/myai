@@ -1,16 +1,595 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>嘟嘟 — 设置</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #fff5f7; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-  </style>
+<meta charset="UTF-8">
+<title>嘟嘟 — 设置</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  width:420px; height:560px;
+  background:#fff5f7; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+
+/* Tabs */
+.tabs {
+  display:flex; background:linear-gradient(135deg,#fce4ec,#f8bbd0);
+  padding:4px 4px 0; gap:2px; flex-shrink:0;
+}
+.tab {
+  flex:1; padding:10px 6px; border:none; background:transparent;
+  color:rgba(255,255,255,0.7); font-size:11px; cursor:pointer;
+  transition:all 0.2s; border-radius:10px 10px 0 0; font-family:inherit;
+}
+.tab:hover { color:#fff; background:rgba(255,255,255,0.1); }
+.tab.active { color:#c2185b; background:#fff5f7; font-weight:600; }
+
+/* Content */
+.content { flex:1; overflow-y:auto; padding:16px; }
+.content::-webkit-scrollbar { width:4px; }
+.content::-webkit-scrollbar-thumb { background:rgba(244,143,177,0.3); border-radius:4px; }
+
+.tab-content { display:none; }
+.tab-content.active { display:block; }
+
+/* Form */
+label { display:block; font-size:12px; color:#8d6e63; margin-top:14px; margin-bottom:4px; font-weight:500; }
+input[type="text"], input[type="password"], input[type="number"], textarea, select {
+  width:100%; padding:8px 12px; border-radius:10px; border:1px solid rgba(244,143,177,0.3);
+  font-size:13px; color:#5d4037; background:#fff; outline:none; font-family:inherit;
+  transition:border 0.2s;
+}
+input:focus, textarea:focus, select:focus { border-color:#f48fb1; }
+textarea { resize:vertical; min-height:60px; }
+
+.row { display:flex; gap:8px; align-items:center; }
+.row label { margin:0; flex:1; }
+.row input[type="range"] { flex:2; }
+
+/* Toggle */
+.toggle-wrap { display:flex; align-items:center; justify-content:space-between; margin-top:12px; }
+.toggle-wrap span { font-size:13px; color:#5d4037; }
+.toggle {
+  width:44px; height:24px; border-radius:12px; background:#e0e0e0;
+  position:relative; cursor:pointer; transition:background 0.2s; border:none;
+}
+.toggle.on { background:linear-gradient(135deg,#f8bbd0,#f48fb1); }
+.toggle::after {
+  content:''; position:absolute; top:2px; left:2px;
+  width:20px; height:20px; border-radius:50%; background:#fff;
+  transition:transform 0.2s; box-shadow:0 1px 3px rgba(0,0,0,0.15);
+}
+.toggle.on::after { transform:translateX(20px); }
+
+/* Buttons */
+.btn {
+  padding:8px 20px; border-radius:20px; border:none; font-size:13px;
+  cursor:pointer; font-family:inherit; transition:all 0.2s; font-weight:500;
+}
+.btn-primary { background:linear-gradient(135deg,#f8bbd0,#f06292); color:#fff; width:100%; margin-top:16px; }
+.btn-primary:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(240,98,146,0.3); }
+.btn-test { background:#fff; color:#c2185b; border:1.5px solid #f48fb1; }
+.btn-test:hover { background:#fce4ec; }
+.btn-danger { background:#ffcdd2; color:#c62828; }
+.btn-danger:hover { background:#ef9a9a; }
+.btn-sm { padding:4px 12px; font-size:11px; border-radius:12px; }
+
+/* Status */
+.status { font-size:12px; margin-top:8px; padding:8px 12px; border-radius:8px; display:none; }
+.status.success { display:block; background:#c8e6c9; color:#2e7d32; }
+.status.error { display:block; background:#ffcdd2; color:#c62828; }
+
+/* Debug log */
+.debug-log {
+  background:#263238; color:#a5d6a7; font-size:11px; padding:10px; border-radius:8px;
+  max-height:120px; overflow-y:auto; font-family:'Consolas','Courier New',monospace;
+  margin-top:12px; white-space:pre-wrap; display:none;
+}
+/* Toast */
+.toast {
+  position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+  padding:10px 24px; border-radius:20px; font-size:13px; font-weight:600;
+  z-index:9999; transition:all 0.3s; pointer-events:none;
+}
+.toast.success { background:#c8e6c9; color:#2e7d32; }
+.toast.error { background:#ffcdd2; color:#c62828; }
+</style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="module" src="./main.tsx"></script>
+<div class="toast" id="toast" style="opacity:0"></div>
+
+<div class="tabs">
+  <button class="tab active" data-tab="basic">⚙ 基础</button>
+  <button class="tab" data-tab="behavior">🖱 行为</button>
+  <button class="tab" data-tab="data">💾 数据</button>
+  <button class="tab" data-tab="api">🔑 API</button>
+</div>
+
+<div id="diagBar" style="background:#ffcdd2;color:#c62828;padding:4px 8px;font-size:11px;flex-shrink:0;display:block">⏳ JS 加载中...</div>
+<div class="content">
+  <!-- ====== 基础设置 ====== -->
+  <div class="tab-content active" id="tab-basic">
+    <div class="toggle-wrap"><span>开机自启动</span><button class="toggle" id="autoStart"></button></div>
+    <div class="toggle-wrap"><span>开机显示助手</span><button class="toggle" id="showOnStart"></button></div>
+    <div class="toggle-wrap"><span>始终置顶</span><button class="toggle on" id="alwaysOnTop"></button></div>
+    <div class="toggle-wrap"><span>自动隐藏（失焦）</span><button class="toggle" id="autoHide"></button></div>
+    <div class="toggle-wrap"><span>动画开关</span><button class="toggle on" id="animToggle"></button></div>
+    <div class="toggle-wrap"><span>调试模式</span><button class="toggle" id="debugMode"></button></div>
+    <div class="toggle-wrap"><span>深色模式</span><button class="toggle" id="darkMode"></button></div>
+    <button class="btn btn-primary" id="saveBasic">保存基础设置</button>
+  </div>
+
+  <!-- 形象设置已移除 -->
+
+  <!-- ====== 行为设置 ====== -->
+  <div class="tab-content" id="tab-behavior">
+    <label>双击行为</label>
+    <select id="doubleClickAction">
+      <option value="chat" selected>打开聊天</option>
+      <option value="settings">打开设置</option>
+      <option value="hide">隐藏助手</option>
+      <option value="none">无动作</option>
+    </select>
+    <div class="toggle-wrap"><span>启用拖拽</span><button class="toggle on" id="dragEnabled"></button></div>
+    <div class="toggle-wrap"><span>边缘吸附</span><button class="toggle on" id="snapEnabled"></button></div>
+    <div class="toggle-wrap"><span>点击穿透</span><button class="toggle" id="clickThrough"></button></div>
+    <button class="btn btn-primary" id="saveBehavior">保存行为设置</button>
+  </div>
+
+  <!-- ====== 数据设置 ====== -->
+  <div class="tab-content" id="tab-data">
+    <label>导出聊天记录</label>
+    <button class="btn btn-test" id="exportChat" style="width:100%">📥 导出为 JSON</button>
+    <label>导入配置</label>
+    <button class="btn btn-test" id="importConfig" style="width:100%">📤 从文件导入</button>
+    <label>清空历史记录</label>
+    <button class="btn btn-danger" id="clearHistory" style="width:100%">🗑 清空所有聊天记录</button>
+    <label>清空所有数据</label>
+    <button class="btn btn-danger" id="clearAll" style="width:100%;margin-top:4px">⚠ 清空全部数据（含记忆）</button>
+  </div>
+
+  <!-- ====== API 设置 ====== -->
+  <div class="tab-content" id="tab-api">
+    <label>API Provider</label>
+    <select id="apiProvider">
+      <option value="deepseek" selected>DeepSeek</option>
+      <option value="openai">OpenAI</option>
+      <option value="claude">Claude (Anthropic)</option>
+      <option value="gemini">Gemini (Google)</option>
+      <option value="custom">自定义</option>
+    </select>
+
+    <label id="apiKeyLabel">API Key</label>
+    <input type="password" id="apiKeyInput" placeholder="sk-...">
+
+    <label>Base URL</label>
+    <input type="text" id="apiBaseUrl" placeholder="https://api.deepseek.com">
+
+    <label>Model</label>
+    <input type="text" id="apiModel" placeholder="deepseek-chat">
+
+    <label>Temperature: <span id="tempLabel">0.8</span></label>
+    <input type="range" id="apiTemp" min="0" max="2" step="0.1" value="0.8" style="width:100%">
+
+    <label>Max Tokens</label>
+    <input type="number" id="apiMaxTokens" value="2048" min="1" max="32768">
+
+    <div class="row" style="margin-top:16px;gap:8px">
+      <button class="btn btn-test" id="testConnection" style="flex:1">🔗 测试连接</button>
+      <button class="btn btn-danger btn-sm" id="resetAPI">重置</button>
+    </div>
+    <div class="status" id="apiStatus"></div>
+
+    <button class="btn btn-primary" id="saveAPI">💾 保存 API 配置</button>
+
+    <div style="margin-top:16px;display:flex;gap:8px">
+      <button class="btn btn-test" id="dumpConfig" style="flex:1">🔍 查看当前配置</button>
+      <button class="btn btn-danger btn-sm" id="resetAll" style="flex:1">🔄 重置全部</button>
+    </div>
+    <div class="debug-log" id="debugLog"></div>
+
+    <!-- ====== 系统诊断面板 ====== -->
+    <div style="margin-top:16px;padding:12px;background:#263238;border-radius:8px;font-family:Consolas,monospace;font-size:11px;color:#a5d6a7;max-height:200px;overflow-y:auto;" id="diagPanel">
+      <div style="color:#ffd54f;margin-bottom:6px;font-weight:bold">🔧 系统诊断</div>
+      <div id="diagContent">点击"运行诊断"检查所有设置项...</div>
+    </div>
+    <button class="btn btn-test" id="runDiag" style="width:100%;margin-top:4px">🩺 运行诊断</button>
+  </div>
+</div>
+
+<script>
+// ========== DEBUG ==========
+let debugMode = true;
+function dlog(msg) {
+  if (!debugMode) return;
+  const el = document.getElementById('debugLog');
+  if (!el) return;
+  const time = new Date().toLocaleTimeString();
+  el.textContent += `[${time}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+  console.log('[SETTINGS]', msg);
+}
+
+// 全局错误捕获
+window.onerror = function(msg, url, line, col, err) {
+  console.error('[SETTINGS ERROR]', msg, 'at', url, 'line', line, 'col', col, err?.stack);
+  dlog('ERROR: ' + msg + ' (line ' + line + ')');
+  diagERR('JS错误: ' + msg + ' (行' + line + ')');
+  return false;
+};
+window.onunhandledrejection = function(evt) {
+  console.error('[SETTINGS UNHANDLED]', evt.reason);
+  dlog('UNHANDLED: ' + (evt.reason?.message || evt.reason));
+  diagERR('Promise错误: ' + (evt.reason?.message || evt.reason));
+};
+
+dlog('设置窗口已加载');
+
+// 可见诊断条
+const diagBar = document.getElementById('diagBar');
+function diagOK(msg) { if (diagBar) { diagBar.style.background = '#c8e6c9'; diagBar.style.color = '#2e7d32'; diagBar.textContent = '✓ ' + msg; } }
+function diagERR(msg) { if (diagBar) { diagBar.style.background = '#ffcdd2'; diagBar.style.color = '#c62828'; diagBar.textContent = '✗ ' + msg; } }
+
+diagOK('JS 已执行 — ' + new Date().toLocaleTimeString());
+
+// 显示调试面板
+const debugLogEl = document.getElementById('debugLog');
+if (debugLogEl) debugLogEl.style.display = 'block';
+
+// 按钮点击全局日志
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest?.('button');
+  if (btn) {
+    const id = btn.id || '(no-id)';
+    const text = (btn.textContent || '').trim().slice(0, 30);
+    dlog('[UI] Button Clicked — #' + id + ' "' + text + '"');
+    console.log('[UI] Button Clicked — #' + id, '"' + text + '"');
+  }
+}, true);
+
+// ========== API 引用（必须在所有使用前初始化）==========
+const api = window.duduAPI;
+dlog('duduAPI 可用: ' + (!!api));
+if (api) {
+  const methods = Object.keys(api).filter(k => typeof api[k] === 'function');
+  dlog('duduAPI 方法数: ' + methods.length);
+  console.log('[SETTINGS] duduAPI methods:', methods.join(', '));
+  diagOK('JS已执行 | API: ' + methods.length + '方法 | ' + new Date().toLocaleTimeString());
+} else {
+  diagERR('window.duduAPI 未定义！Preload可能未加载');
+  console.error('[SETTINGS] duduAPI is undefined — preload failed');
+}
+
+// 监听主进程要求重新加载
+api?.onSettingsReload?.(() => {
+  dlog('收到 settings:reload，刷新窗口');
+  location.reload();
+});
+
+// ========== Toast 反馈 ==========
+let toastTimer = 0;
+function showToast(msg, ok) {
+  const t = document.getElementById('toast');
+  t.textContent = (ok ? '✓ ' : '✗ ') + msg;
+  t.className = 'toast ' + (ok ? 'success' : 'error');
+  t.style.opacity = '1';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.style.opacity = '0'; }, 2000);
+}
+
+// ========== Tab switching ==========
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+  });
+});
+
+// ========== Toggle helpers ==========
+document.querySelectorAll('.toggle').forEach(btn => {
+  btn.addEventListener('click', () => btn.classList.toggle('on'));
+});
+
+// ========== Range labels ==========
+document.getElementById('apiTemp').addEventListener('input', function() {
+  document.getElementById('tempLabel').textContent = this.value;
+});
+
+// ========== API Provider change ==========
+const providerConfig = {
+  openai:   { baseUrl: 'https://api.openai.com/v1',   model: 'gpt-4o',           keyLabel: 'OpenAI API Key' },
+  claude:   { baseUrl: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-6', keyLabel: 'Claude API Key' },
+  gemini:   { baseUrl: 'https://generativelanguage.googleapis.com/v1beta', model: 'gemini-2.5-pro', keyLabel: 'Gemini API Key' },
+  deepseek: { baseUrl: 'https://api.deepseek.com',     model: 'deepseek-chat',      keyLabel: 'DeepSeek API Key' },
+  custom:   { baseUrl: '',                              model: '',                   keyLabel: '自定义 API Key' },
+};
+document.getElementById('apiProvider').addEventListener('change', function() {
+  const cfg = providerConfig[this.value];
+  document.getElementById('apiBaseUrl').value = cfg.baseUrl;
+  document.getElementById('apiModel').value = cfg.model;
+  document.getElementById('apiKeyLabel').textContent = cfg.keyLabel;
+});
+
+// ========== Load settings from SettingsManager ==========
+function setTgl(id, val) { document.getElementById(id).classList.toggle('on', val); }
+(async function loadSettings() {
+  try {
+    const s = await api?.loadAllSettings?.();
+    dlog('全部设置: ' + JSON.stringify(s));
+    if (!s) return;
+    // 基础
+    setTgl('autoStart',    s.autoStart);
+    setTgl('showOnStart',  s.showOnStart);
+    setTgl('alwaysOnTop',  s.alwaysOnTop);
+    setTgl('autoHide',     s.autoHide);
+    setTgl('animToggle',   s.animEnabled);
+    setTgl('debugMode',    s.debugMode);
+    setTgl('darkMode',     s.darkMode);
+    // 行为
+    setTgl('dragEnabled',  s.dragEnabled);
+    setTgl('snapEnabled',  s.snapEnabled);
+    setTgl('clickThrough', s.clickThrough);
+    document.getElementById('doubleClickAction').value = s.doubleClickAction ?? 'chat';
+    // API
+    document.getElementById('apiProvider').value = s.apiProvider ?? 'deepseek';
+    document.getElementById('apiKeyInput').value = s.apiKey ?? '';
+    document.getElementById('apiBaseUrl').value = s.apiBaseUrl ?? 'https://api.deepseek.com';
+    document.getElementById('apiModel').value = s.apiModel ?? 'deepseek-chat';
+    document.getElementById('apiTemp').value = s.apiTemperature ?? 0.8;
+    document.getElementById('tempLabel').textContent = String(s.apiTemperature ?? 0.8);
+    document.getElementById('apiMaxTokens').value = s.apiMaxTokens ?? 2048;
+    debugMode = s.debugMode;
+  } catch(e) { dlog('加载设置失败: ' + e.message); }
+})();
+
+// ========== Save (via SettingsManager — 即时生效) ==========
+function getTgl(id) { return document.getElementById(id).classList.contains('on'); }
+function getVal(id) { return document.getElementById(id).value; }
+
+document.getElementById('saveBasic').addEventListener('click', () => {
+  const cfg = {
+    autoStart: getTgl('autoStart'), showOnStart: getTgl('showOnStart'),
+    alwaysOnTop: getTgl('alwaysOnTop'), autoHide: getTgl('autoHide'),
+    animEnabled: getTgl('animToggle'), debugMode: getTgl('debugMode'),
+    darkMode: getTgl('darkMode'),
+  };
+  debugMode = cfg.debugMode;
+  dlog('保存基础设置: ' + JSON.stringify(cfg));
+  api?.saveSettings?.(cfg)?.then(() => { dlog('基础设置已保存'); showToast('基础设置已保存', true); }).catch(e => { dlog('保存失败: ' + e.message); showToast('保存失败: ' + e.message, false); });
+  api?.setAutoStart?.(cfg.autoStart);
+});
+
+document.getElementById('saveBehavior').addEventListener('click', () => {
+  const cfg = {
+    doubleClickAction: getVal('doubleClickAction'),
+    dragEnabled: getTgl('dragEnabled'),
+    snapEnabled: getTgl('snapEnabled'),
+    clickThrough: getTgl('clickThrough'),
+  };
+  dlog('保存行为设置: ' + JSON.stringify(cfg));
+  api?.saveSettings?.(cfg)?.then(() => { dlog('行为设置已保存'); showToast('行为设置已保存', true); }).catch(e => showToast('保存失败: ' + e.message, false));
+});
+
+// ========== API 自动保存（任何字段修改即立即生效+持久化）==========
+let apiSaveTimer = 0;
+function autoSaveAPI() {
+  clearTimeout(apiSaveTimer);
+  apiSaveTimer = setTimeout(async () => {
+    const cfg = {
+      apiProvider: getVal('apiProvider'),
+      apiKey: getVal('apiKeyInput'),
+      apiBaseUrl: getVal('apiBaseUrl'),
+      apiModel: getVal('apiModel'),
+      apiTemperature: parseFloat(getVal('apiTemp')),
+      apiMaxTokens: parseInt(getVal('apiMaxTokens')),
+    };
+    dlog('[CONFIG] Auto-save — ' + JSON.stringify({...cfg, apiKey: cfg.apiKey ? '***' : ''}));
+    try {
+      await api?.saveSettings?.(cfg);
+      console.log('[CONFIG] Auto-saved');
+    } catch(e) { console.error('[CONFIG] Auto-save failed:', e.message); }
+  }, 400); // 400ms 防抖
+}
+
+// 所有 API 字段 change 事件 = 即时保存
+['apiProvider','apiKeyInput','apiBaseUrl','apiModel','apiTemp','apiMaxTokens'].forEach(id => {
+  document.getElementById(id)?.addEventListener('change', autoSaveAPI);
+  document.getElementById(id)?.addEventListener('input', autoSaveAPI);
+});
+
+// saveAPI 按钮保留但改为手动备份（可选）
+document.getElementById('saveAPI').addEventListener('click', async () => {
+  const cfg = {
+    apiProvider: getVal('apiProvider'),
+    apiKey: getVal('apiKeyInput'),
+    apiBaseUrl: getVal('apiBaseUrl'),
+    apiModel: getVal('apiModel'),
+    apiTemperature: parseFloat(getVal('apiTemp')),
+    apiMaxTokens: parseInt(getVal('apiMaxTokens')),
+  };
+  dlog('手动保存 API 配置');
+  try {
+    await api?.saveSettings?.(cfg);
+    apiTestStatus(true, 'API 配置已保存 ✓');
+  } catch(e) { apiTestStatus(false, '保存失败: ' + e.message); }
+});
+
+// ========== Reset API ==========
+document.getElementById('resetAPI').addEventListener('click', async () => {
+  document.getElementById('apiKeyInput').value = '';
+  document.getElementById('apiProvider').value = 'deepseek';
+  document.getElementById('apiBaseUrl').value = 'https://api.deepseek.com';
+  document.getElementById('apiModel').value = 'deepseek-chat';
+  document.getElementById('apiTemp').value = '0.8';
+  document.getElementById('tempLabel').textContent = '0.8';
+  document.getElementById('apiMaxTokens').value = '2048';
+  document.getElementById('apiStatus').className = 'status';
+  document.getElementById('apiStatus').style.display = 'none';
+  dlog('API 配置已重置');
+});
+
+// ========== Test Connection ==========
+document.getElementById('testConnection').addEventListener('click', async () => {
+  const statusEl = document.getElementById('apiStatus');
+  statusEl.className = 'status';
+  statusEl.style.display = 'block';
+  statusEl.textContent = '⏳ 测试连接中...';
+  dlog('测试 API 连接: ' + getVal('apiBaseUrl'));
+
+  const apiKey = getVal('apiKeyInput');
+  const baseUrl = getVal('apiBaseUrl') || 'https://api.deepseek.com';
+  const model = getVal('apiModel') || 'deepseek-chat';
+
+  if (!apiKey) {
+    statusEl.className = 'status error';
+    statusEl.textContent = '连接失败：未填写 API Key';
+    dlog('连接测试失败: API Key 为空');
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Hi' }], max_tokens: 5 }),
+    });
+
+    if (resp.ok) {
+      statusEl.className = 'status success';
+      statusEl.textContent = '✅ 连接成功！API 配置有效';
+      dlog('连接测试: 成功 (' + resp.status + ')');
+    } else {
+      const errText = await resp.text().catch(() => '');
+      statusEl.className = 'status error';
+      if (resp.status === 401) {
+        statusEl.textContent = '连接失败：401 Unauthorized — API Key 无效';
+      } else if (resp.status === 429) {
+        statusEl.textContent = '连接失败：429 Too Many Requests — 请求过于频繁';
+      } else if (resp.status === 404) {
+        statusEl.textContent = '连接失败：404 Not Found — 模型不存在或 URL 错误';
+      } else {
+        statusEl.textContent = `连接失败：${resp.status} — ${errText.slice(0, 100)}`;
+      }
+      dlog(`连接测试失败: ${resp.status} ${errText}`);
+    }
+  } catch(e) {
+    statusEl.className = 'status error';
+    statusEl.textContent = '连接失败：网络超时或无法访问 — ' + e.message;
+    dlog('连接测试异常: ' + e.message);
+  }
+});
+
+// ========== Data actions ==========
+document.getElementById('exportChat').addEventListener('click', async () => {
+  dlog('导出聊天记录');
+  try {
+    const data = await api?.exportMemories?.();
+    // Create download
+    const blob = new Blob([JSON.stringify(data || {}, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'dudu-chat-export.json'; a.click();
+    URL.revokeObjectURL(url);
+    dlog('导出完成');
+  } catch(e) {
+    dlog('导出失败: ' + e.message);
+  }
+});
+
+document.getElementById('importConfig').addEventListener('click', async () => {
+  if (!confirm('是否从配置文件导入？\n\n导入后将覆盖当前配置。')) {
+    dlog('[CONFIG] Import Cancelled');
+    return;
+  }
+  dlog('[CONFIG] Import Started');
+  try {
+    const result = await api?.importConfig?.();
+    if (result?.success) {
+      dlog('[CONFIG] Import Success — keys=' + result.count);
+      console.log('[CONFIG] Import Success');
+      showToast('✓ 配置导入成功', true);
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      dlog('[CONFIG] Import Failed — ' + (result?.error || 'unknown'));
+      console.log('[CONFIG] Import Failed');
+      showToast('✗ 配置导入失败: ' + (result?.error || '未知错误'), false);
+    }
+  } catch(e) {
+    dlog('[CONFIG] Import Failed — ' + e.message);
+    console.log('[CONFIG] Import Failed');
+    showToast('✗ 配置导入失败: ' + e.message, false);
+  }
+});
+
+document.getElementById('clearHistory').addEventListener('click', async () => {
+  if (!confirm('确定要清空所有聊天记录吗？此操作不可撤销。')) return;
+  dlog('清空所有聊天记录...');
+  try {
+    const result = await api?.clearAllChatHistory?.();
+    if (result?.success) {
+      dlog('聊天记录已清空 — 对话数=' + result.count);
+      showToast('✓ 聊天记录已清空', true);
+    } else {
+      dlog('清空失败: ' + result?.error);
+      showToast('✗ 清空失败: ' + result?.error, false);
+    }
+  } catch(e) {
+    dlog('清空异常: ' + e.message);
+    showToast('✗ 清空失败: ' + e.message, false);
+  }
+});
+
+document.getElementById('clearAll').addEventListener('click', async () => {
+  if (!confirm('⚠ 此操作不可恢复。\n\n将删除：\n• 聊天记录\n• 头像设置\n• 背景设置\n• 窗口位置\n• 行为设置\n• 语音设置\n• API配置\n• 本地记忆\n• 缓存数据\n\n确定要继续吗？')) return;
+  if (!confirm('最后确认：此操作不可恢复，确定清空所有数据？')) return;
+  dlog('清空全部数据...');
+  try {
+    const result = await api?.clearAllData?.();
+    if (result?.success) {
+      dlog('全部数据已清空');
+      showToast('✓ 所有数据已清空', true);
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      dlog('清空失败: ' + result?.error);
+      showToast('✗ 清空失败: ' + result?.error, false);
+    }
+  } catch(e) {
+    dlog('清空异常: ' + e.message);
+    showToast('✗ 清空失败: ' + e.message, false);
+  }
+});
+
+
+// ========== 查看当前配置 (debug dump) ==========
+document.getElementById('dumpConfig').addEventListener('click', async () => {
+  const el = document.getElementById('debugLog');
+  el.style.display = 'block';
+  el.textContent = '加载中...';
+  try {
+    const data = await api?.dumpConfig?.();
+    el.textContent = JSON.stringify(data, null, 2);
+  } catch(e) { el.textContent = '导出失败: ' + e.message; }
+});
+
+// ========== 重置全部设置 ==========
+document.getElementById('resetAll').addEventListener('click', async () => {
+  if (!confirm('确定要重置所有设置到默认值吗？')) return;
+  try {
+    const defaults = await api?.resetSettings?.();
+    dlog('已重置为默认值: ' + JSON.stringify(defaults));
+    location.reload();
+  } catch(e) { dlog('重置失败: ' + e.message); }
+});
+
+// ========== Test connection (real HTTP fetch) ==========
+function apiTestStatus(ok, msg) {
+  const el = document.getElementById('apiStatus');
+  el.className = 'status ' + (ok ? 'success' : 'error');
+  el.style.display = 'block';
+  el.textContent = msg;
+}
+</script>
 </body>
 </html>

@@ -6,6 +6,7 @@ import type { CharacterStore } from '@dudu/character-system';
 import type { MemoryStore, MemoryExtractor } from '@dudu/memory-system';
 import type { PrivacySwitch } from './awareness/privacy-switch';
 import type { DuduDatabase } from '@dudu/storage';
+import type { SettingsManager } from './settings-manager';
 
 interface IPCDeps {
   windowManager: WindowManager;
@@ -16,22 +17,38 @@ interface IPCDeps {
   memoryExtractor: MemoryExtractor;
   privacySwitch: PrivacySwitch;
   db: DuduDatabase;
+  settingsManager: SettingsManager;
 }
 
 export function registerIPCHandlers(deps: IPCDeps): void {
   const {
     windowManager, conversationManager, characterStore,
     aiClient, memoryStore, memoryExtractor, privacySwitch, db,
+    settingsManager,
   } = deps;
+
+  // ========== Debug 日志 ==========
+  const DEBUG = process.env.DUDU_DEBUG === '1' || true;
+  function log(tag: string, msg: string, data?: unknown): void {
+    if (!DEBUG) return;
+    const ts = new Date().toISOString().slice(11, 19);
+    console.log(`[DUDU|${ts}|${tag}] ${msg}`, data !== undefined ? JSON.stringify(data).slice(0, 200) : '');
+  }
+
+  log('IPC', 'IPC 处理器注册开始');
 
   // ========== 对话管理 ==========
 
   ipcMain.handle('chat:load-conversations', async () => {
-    return conversationManager.listConversations();
+    const result = conversationManager.listConversations();
+    log('IPC', '加载对话列表', { count: result.length });
+    return result;
   });
 
   ipcMain.handle('chat:create-conversation', async () => {
-    return conversationManager.createConversation();
+    const conv = conversationManager.createConversation();
+    log('IPC', '创建新对话', { id: conv.id });
+    return conv;
   });
 
   ipcMain.handle('chat:delete-conversation', async (_e, id: string) => {
@@ -40,15 +57,18 @@ export function registerIPCHandlers(deps: IPCDeps): void {
   });
 
   ipcMain.handle('chat:load-messages', async (_e, convId: string) => {
-    return conversationManager.getMessages(convId);
+    const msgs = conversationManager.getMessages(convId);
+    log('IPC', '加载消息', { convId, count: msgs.length });
+    return msgs;
   });
 
   // ========== 核心聊天流 ==========
 
   ipcMain.on('chat:send-message', async (event, payload: { content: string; conversationId: string }) => {
     const { content, conversationId } = payload;
+    log('IPC', '收到用户消息', { convId: conversationId, len: content.length });
     const chatWindow = windowManager.getChatWindow();
-    if (!chatWindow) return;
+    if (!chatWindow) { log('IPC', '聊天窗口不存在，无法发送'); return; }
 
     try {
       // 1. 保存用户消息到 DB
@@ -71,12 +91,26 @@ export function registerIPCHandlers(deps: IPCDeps): void {
         confidence: m.confidence,
       }));
 
-      // 动态 import buildSystemPrompt
       const { buildSystemPrompt: buildPrompt } = await import('@dudu/chat-engine');
       const systemMsg = buildPrompt(characterStore, memoryContext, undefined);
 
-      // 3. 获取最近对话上下文
+      // 3. 获取最近对话上下文（capped at 3000 tokens）
       const context = conversationManager.getRecentContext(conversationId, 3000);
+      const systemTokens = Math.ceil(systemMsg.content.length / 2);
+      const contextTokens = context.reduce((sum, m) => sum + Math.ceil(m.content.length / 2), 0);
+      const newTokens = Math.ceil(content.length / 2);
+      const totalTokens = systemTokens + contextTokens + newTokens;
+
+      log('IPC', 'Token统计', {
+        systemTokens, contextTokens, newTokens, totalTokens,
+        contextRounds: context.length,
+      });
+      console.log(`[TOKEN] System:${systemTokens} | Context:${contextTokens} | New:${newTokens} | Total:${totalTokens} | Rounds:${context.length}`);
+
+      if (context.length >= 40) {
+        console.log('[TOKEN] Context approaching cap — consider enabling summarization');
+      }
+
       const messages = [
         systemMsg,
         ...context.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
@@ -88,7 +122,7 @@ export function registerIPCHandlers(deps: IPCDeps): void {
       await aiClient.chatStream(messages, {
         onToken: (token: string) => {
           fullContent += token;
-          chatWindow.webContents.send('chat:stream-token', { token });
+          chatWindow.webContents.send('chat:stream-token', token);
         },
         onComplete: async (response) => {
           // 5. 保存 AI 回复到 DB
@@ -115,15 +149,11 @@ export function registerIPCHandlers(deps: IPCDeps): void {
           }
         },
         onError: (error: Error) => {
-          chatWindow.webContents.send('chat:stream-error', {
-            error: error.message || 'AI 回复失败',
-          });
+          chatWindow.webContents.send('chat:stream-error', error.message || 'AI 回复失败');
         },
       });
     } catch (error) {
-      chatWindow.webContents.send('chat:stream-error', {
-        error: (error as Error).message || '发送消息失败',
-      });
+      chatWindow.webContents.send('chat:stream-error', (error as Error).message || '发送消息失败');
     }
   });
 
@@ -137,33 +167,66 @@ export function registerIPCHandlers(deps: IPCDeps): void {
     return characterStore.save(profile as Parameters<typeof characterStore.save>[0]);
   });
 
-  // ========== API 配置 ==========
+  // ========== 设置中心（通过 SettingsManager）=================
+
+  ipcMain.handle('settings:load-all', async () => {
+    return settingsManager.getAll();
+  });
+
+  ipcMain.handle('settings:save', async (_e, cfg: Record<string, unknown>) => {
+    log('IPC', '保存设置', cfg);
+    return settingsManager.save(cfg as Parameters<typeof settingsManager.save>[0]);
+  });
+
+  ipcMain.handle('settings:apply', async (_e, cfg: Record<string, unknown>) => {
+    log('IPC', '应用设置（不保存）', cfg);
+    settingsManager.apply(cfg as Parameters<typeof settingsManager.save>[0]);
+    return true;
+  });
+
+  ipcMain.handle('settings:reset', async () => {
+    return settingsManager.reset();
+  });
+
+  ipcMain.handle('settings:auto-start', async (_e, enabled: boolean) => {
+    return settingsManager.setAutoStart(enabled);
+  });
+
+  ipcMain.handle('settings:dump', async () => {
+    const settings = settingsManager.getAll();
+    const conversations = conversationManager.listConversations();
+    const apiConfig = {
+      key_len: settings.apiKey ? settings.apiKey.length : 0,
+      baseUrl: settings.apiBaseUrl,
+      model: settings.apiModel,
+    };
+    return { settings, apiConfig, conversationCount: conversations.length };
+  });
+
+  // ========== API 配置（兼容旧接口）=================
 
   ipcMain.handle('settings:load-api-config', async () => {
-    const rows = db.query<{ key: string; value: string }>(
-      "SELECT key, value FROM config WHERE key LIKE 'api.%'",
-    );
-    const config: Record<string, string> = {};
-    for (const row of rows) {
-      config[row.key.replace('api.', '')] = row.value;
-    }
-    return config;
+    const s = settingsManager.getAll();
+    return {
+      apiKey: s.apiKey,
+      api_key: s.apiKey,
+      baseUrl: s.apiBaseUrl,
+      base_url: s.apiBaseUrl,
+      model: s.apiModel,
+      temperature: String(s.apiTemperature),
+      maxTokens: String(s.apiMaxTokens),
+      max_tokens: String(s.apiMaxTokens),
+    };
   });
 
   ipcMain.handle('settings:save-api-config', async (_e, config: Record<string, unknown>) => {
-    for (const [k, v] of Object.entries(config)) {
-      db.run('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)', [
-        `api.${k}`,
-        String(v),
-      ]);
-    }
-    // 更新 AI 客户端配置
-    const apiKey = (config.apiKey as string) || '';
-    const baseUrl = (config.baseUrl as string) || 'https://api.deepseek.com';
-    const temperature = parseFloat((config.temperature as string) || '0.8');
-    const maxTokens = parseInt((config.maxTokens as string) || '2048', 10);
-    aiClient.updateConfig({ apiKey, baseUrl, temperature, maxTokens });
-    return true;
+    const partial: Record<string, unknown> = {};
+    if (config.apiKey !== undefined) partial.apiKey = config.apiKey;
+    if (config.baseUrl !== undefined) partial.apiBaseUrl = config.baseUrl;
+    if (config.model !== undefined) partial.apiModel = config.model;
+    if (config.temperature !== undefined) partial.apiTemperature = parseFloat(config.temperature as string);
+    if (config.maxTokens !== undefined) partial.apiMaxTokens = parseInt(config.maxTokens as string, 10);
+    return settingsManager.save(partial);
   });
 
   // ========== 记忆管理 ==========
@@ -195,10 +258,77 @@ export function registerIPCHandlers(deps: IPCDeps): void {
     return privacySwitch.toggle();
   });
 
+  // ========== 双击行为 ==========
+
+  ipcMain.on('ball:double-click', () => {
+    const action = settingsManager.getAll().doubleClickAction;
+    console.log('[DOUBLE_CLICK] Action =', action);
+    switch (action) {
+      case 'hide':
+        console.log('[DOUBLE_CLICK] Hide Assistant');
+        windowManager.hideAll();
+        break;
+      case 'settings':
+        windowManager.openSettingsInternal();
+        break;
+      case 'none':
+        console.log('[DOUBLE_CLICK] No Action');
+        break;
+      case 'chat':
+      default:
+        windowManager.openChat();
+    }
+  });
+
+  // ========== 清空聊天记录 ==========
+
+  ipcMain.handle('chat:clear-all', async () => {
+    try {
+      const count = conversationManager.clearAllConversations();
+      const chatWin = windowManager.getChatWindow();
+      if (chatWin && !chatWin.isDestroyed()) {
+        chatWin.webContents.send('chat:clear-dom');
+      }
+      log('IPC', '清空所有聊天记录', { conversationsDeleted: count });
+      return { success: true, count };
+    } catch (e: any) {
+      log('IPC', '清空聊天失败', { error: e.message });
+      return { success: false, error: e.message };
+    }
+  });
+
+  // ========== 清空所有数据（含记忆）==========
+
+  ipcMain.handle('data:clear-all', async () => {
+    try {
+      const convCount = conversationManager.clearAllConversations();
+      log('IPC', '已清空对话', { count: convCount });
+
+      const memCount = memoryStore.clear();
+      log('IPC', '已清空记忆', { count: memCount });
+
+      settingsManager.reset();
+      log('IPC', '已重置设置');
+
+      const chatWin = windowManager.getChatWindow();
+      if (chatWin && !chatWin.isDestroyed()) {
+        chatWin.webContents.send('chat:clear-dom');
+      }
+
+      windowManager.sendToSettingsWindow?.('settings:reload');
+
+      console.log('[DATA] All data cleared — conversations:' + convCount + ' memories:' + memCount);
+      return { success: true, conversations: convCount, memories: memCount };
+    } catch (e: any) {
+      log('IPC', '清空全部数据失败', { error: e.message });
+      return { success: false, error: e.message };
+    }
+  });
+
   // ========== 窗口控制 ==========
 
   ipcMain.on('chat:close', () => {
-    windowManager.toggleChat();
+    windowManager.getChatWindow()?.hide();
   });
 
   ipcMain.on('window:hide', () => {

@@ -1,13 +1,234 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>嘟嘟</title>
-  <link rel="stylesheet" href="./floating-ball.css" />
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; }
+
+body {
+  background: transparent;
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+/* ====== 动画 ====== */
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+@keyframes bellWiggle {
+  0%, 100% { transform: translateX(-50%) rotate(0); }
+  25% { transform: translateX(-50%) rotate(-12deg); }
+  75% { transform: translateX(-50%) rotate(12deg); }
+}
+@keyframes blinkAnim {
+  0%, 90%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+
+/* ====== 角色 ====== */
+.dudu-face {
+  width: 58px; height: 58px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff5f7, #ffccbc, #ffab91);
+  box-shadow: 0 4px 20px rgba(255,138,101,0.35), inset 0 -3px 6px rgba(255,138,101,0.12), 0 0 0 2.5px rgba(255,255,255,0.3);
+  position: relative; overflow: visible;
+  animation: breathe 3s ease-in-out infinite;
+  transition: box-shadow 0.2s;
+  cursor: grab;
+}
+.dudu-face:active { cursor: grabbing; }
+.dudu-face:hover {
+  box-shadow: 0 6px 28px rgba(255,138,101,0.5), inset 0 -3px 6px rgba(255,138,101,0.12), 0 0 0 2.5px rgba(255,255,255,0.35);
+}
+
+/* 猫耳 */
+.ear-outer {
+  position: absolute; top: -6px; width: 0; height: 0;
+  border-left: 9px solid transparent; border-right: 9px solid transparent;
+  border-bottom: 16px solid #3a3a3a; border-radius: 40%;
+}
+.ear-l { left: 12px; transform: rotate(-15deg); }
+.ear-r { right: 12px; transform: rotate(15deg); }
+.ear-inner {
+  position: absolute; top: 3px; left: -4.5px; width: 0; height: 0;
+  border-left: 4.5px solid transparent; border-right: 4.5px solid transparent;
+  border-bottom: 9px solid #f48fb1; border-radius: 40%;
+}
+
+.hair  { position: absolute; top: 7px; left: 14%; width: 72%; height: 18px; background: #4a2c2a; border-radius: 60% 60% 0 0; }
+.eye   { position: absolute; top: 24px; width: 4px; height: 4px; background: #3e2723; border-radius: 50%; animation: blinkAnim 4s ease-in-out infinite; }
+.eye-l { left: 24px; } .eye-r { right: 24px; }
+.eye::after { content: ''; position: absolute; top: 1px; left: 1px; width: 1.5px; height: 1.5px; background: white; border-radius: 50%; }
+.blush { position: absolute; top: 30px; width: 10px; height: 4.5px; background: #f48fb1; border-radius: 50%; opacity: 0.45; }
+.blush-l { left: 7px; } .blush-r { right: 7px; }
+.nose-dot { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); width: 2.5px; height: 1.5px; background: #f48fb1; border-radius: 50%; }
+.mouth-dot { position: absolute; top: 35px; left: 50%; transform: translateX(-50%); font-size: 8px; color: #e57373; line-height: 1; }
+.whisker { position: absolute; height: 1px; background: #bcaaa4; border-radius: 1px; opacity: 0.45; }
+.collar  { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); width: 26px; height: 4.5px; background: #e91e63; border-radius: 2px; }
+.bell    { position: absolute; bottom: 9px; left: 50%; transform: translateX(-50%); width: 6.5px; height: 6.5px; background: radial-gradient(circle at 40% 35%, #fff9c4, #ffd54f, #ffb300); border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+.think-bubble { position: absolute; top: -10px; right: -4px; font-size: 11px; color: #f48fb1; opacity: 0.8; }
+
+</style>
 </head>
 <body>
-  <div id="root"></div>
-  <script type="module" src="./main.tsx"></script>
+
+<!-- ========== 嘟嘟角色 ========== -->
+<div class="dudu-face" id="dudu">
+  <div class="ear-outer ear-l" id="earL"><div class="ear-inner"></div></div>
+  <div class="ear-outer ear-r" id="earR"><div class="ear-inner"></div></div>
+  <div class="hair"></div>
+  <div class="eye eye-l"></div><div class="eye eye-r"></div>
+  <div class="blush blush-l"></div><div class="blush blush-r"></div>
+  <div class="nose-dot"></div>
+  <div class="mouth-dot" id="mouth">ω</div>
+  <div class="whisker" style="top:32px;left:-3px;width:13px;transform:rotate(-8deg);"></div>
+  <div class="whisker" style="top:34px;left:-3px;width:10px;"></div>
+  <div class="whisker" style="top:32px;right:-3px;width:13px;transform:rotate(8deg);"></div>
+  <div class="whisker" style="top:34px;right:-3px;width:10px;"></div>
+  <div class="collar"></div>
+  <div class="bell" id="bell"></div>
+  <div class="think-bubble" id="thinkBubble" style="display:none;">?</div>
+</div>
+
+<!-- 右键菜单改用原生 Electron Menu（主进程创建，不受80×80窗口裁切） -->
+
+<script>
+// ==================== DEBUG ====================
+console.log('==================================================');
+console.log('[BALL] Floating ball HTML loaded');
+console.log('[BALL] window.duduAPI exists:', !!window.duduAPI);
+if (window.duduAPI) {
+  console.log('[BALL] API keys:', Object.keys(window.duduAPI));
+  console.log('[BALL] onBallClick exists:', !!window.duduAPI.onBallClick);
+  console.log('[BALL] onBallDragMove exists:', !!window.duduAPI.onBallDragMove);
+  console.log('[BALL] onBallDragEnd exists:', !!window.duduAPI.onBallDragEnd);
+}
+console.log('[BALL] window.screen:', window.screen ? `${window.screen.width}x${window.screen.height}` : 'undefined');
+console.log('==================================================');
+
+// ==================== 元素引用 ====================
+const dudu       = document.getElementById('dudu');
+const mouth      = document.getElementById('mouth');
+const bell       = document.getElementById('bell');
+const thinkBubble = document.getElementById('thinkBubble');
+const earL       = document.getElementById('earL');
+const earR       = document.getElementById('earR');
+const api        = window.duduAPI;
+
+// ==================== 猫耳抖动 + 铃铛 ====================
+setInterval(() => {
+  earL.classList.add('wiggle-l'); earR.classList.add('wiggle-r');
+  setTimeout(() => { earL.classList.remove('wiggle-l'); earR.classList.remove('wiggle-r'); }, 350);
+}, 5000 + Math.random() * 5000);
+
+setInterval(() => {
+  if (Math.random() < 0.3) {
+    bell.style.animation = 'bellWiggle 0.3s ease-in-out 3';
+    setTimeout(() => bell.style.animation = '', 900);
+  }
+}, 8000);
+
+// ==================== 表情切换 ====================
+function setExpression(expr) {
+  thinkBubble.style.display = 'none';
+  bell.style.animation = '';
+  switch(expr) {
+    case 'smile':     mouth.textContent = '◡'; break;
+    case 'thinking':  mouth.textContent = '~'; thinkBubble.style.display = 'block'; break;
+    case 'surprised': mouth.textContent = '○'; break;
+    case 'sleepy':    mouth.textContent = '~'; break;
+    case 'excited':   mouth.textContent = '▽'; bell.style.animation = 'bellWiggle 0.3s ease-in-out 3'; break;
+    default:          mouth.textContent = 'ω';
+  }
+}
+api?.onExpressionChanged?.((expr) => setExpression(expr));
+
+// ====== Dark mode listener ======
+api?.onDarkModeChanged?.((dark) => { document.body.style.background = dark ? "#2a1a2e" : "transparent"; });
+
+
+// ==================== 点击 vs 拖动判定 ====================
+const CLICK_THRESHOLD = 5; // 像素，小于此值视为点击
+let mouseStartX = 0, mouseStartY = 0;
+let isDragging = false;
+let totalDX = 0, totalDY = 0;
+
+dudu.addEventListener('mousedown', (e) => {
+  console.log('[BALL] MouseDown button=' + e.button + ' screenX=' + e.screenX + ' screenY=' + e.screenY);
+  if (e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  mouseStartX = e.screenX;
+  mouseStartY = e.screenY;
+  totalDX = 0; totalDY = 0;
+  isDragging = true;
+  dudu.style.transition = 'none';
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  const dx = e.screenX - mouseStartX;
+  const dy = e.screenY - mouseStartY;
+  totalDX += Math.abs(dx); totalDY += Math.abs(dy);
+  mouseStartX = e.screenX;
+  mouseStartY = e.screenY;
+  api?.onBallDragMove?.(dx, dy);
+});
+
+document.addEventListener('mouseup', (e) => {
+  console.log('[BALL] MouseUp clicked=' + isDragging);
+  if (!isDragging) return;
+  isDragging = false;
+  dudu.style.transition = '';
+
+  const totalDist = Math.sqrt(totalDX * totalDX + totalDY * totalDY);
+  console.log('[BALL] totalDist=' + Math.round(totalDist) + ' threshold=' + CLICK_THRESHOLD);
+
+  if (totalDist < CLICK_THRESHOLD) {
+    console.log('[BALL] *** CLICK DETECTED ***');
+    console.log('[BALL] Calling api.onBallClick...');
+    console.log('[BALL] api exists:', !!api);
+    console.log('[BALL] api.onBallClick exists:', !!(api && api.onBallClick));
+    api?.onBallClick?.();
+    console.log('[BALL] api.onBallClick called');
+    setExpression('smile');
+    setTimeout(() => setExpression('normal'), 1500);
+  } else {
+    console.log('[BALL] Drag ended (distance=' + Math.round(totalDist) + ')');
+    api?.onBallDragEnd?.(false);
+  }
+});
+
+// ==================== 双击监听 ====================
+dudu.addEventListener('dblclick', (e) => {
+  console.log('[BALL] *** DBLCLICK EVENT TRIGGERED ***');
+  e.preventDefault();
+  e.stopPropagation();
+  // 发送双击事件到主进程，由 SettingsManager 的 doubleClickAction 决定行为
+  api?.onDoubleClick?.();
+});
+
+// ==================== 右键菜单 ====================
+dudu.addEventListener('contextmenu', (e) => {
+  console.log('[BALL] *** CONTEXTMENU TRIGGERED ***');
+  e.preventDefault();
+  e.stopPropagation();
+  // 使用原生 Electron Menu（主进程创建，不受 80×80 窗口裁切）
+  api?.showContextMenu?.();
+});
+
+// showContextMenu + menu handlers removed — using native Electron Menu via IPC
+
+// ==================== 右键菜单样式补充 ====================
+// 动态注入 wiggle 类样式
+const styleSheet = document.createElement('style');
+styleSheet.textContent = '.ear-outer.wiggle-l { transform: rotate(-20deg) scale(1.05) !important; } .ear-outer.wiggle-r { transform: rotate(20deg) scale(1.05) !important; }';
+document.head.appendChild(styleSheet);
+
+console.log('🐱 嘟嘟悬浮球已就绪 — 支持拖拽/点击/右键菜单');
+</script>
 </body>
 </html>

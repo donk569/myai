@@ -1,6 +1,8 @@
 node_modules/
 dist/
 out/
+build/
+release/
 .env
 *.db
 *.db-journal

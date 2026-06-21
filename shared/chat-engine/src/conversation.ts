@@ -76,6 +76,16 @@ export class ConversationManager {
     this.db.run('DELETE FROM conversations WHERE id = ?', [id]);
   }
 
+  // 清空所有对话和消息
+  clearAllConversations(): number {
+    const convCount = this.db.get<{ count: number }>(
+      'SELECT COUNT(*) as count FROM conversations'
+    )?.count || 0;
+    this.db.run('DELETE FROM messages');
+    this.db.run('DELETE FROM conversations');
+    return convCount;
+  }
+
   // 添加消息
   addMessage(
     conversationId: string,

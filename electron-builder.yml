@@ -1,0 +1,46 @@
+appId: com.dudu.desktop
+productName: 嘟嘟
+copyright: Copyright © 2024
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - out/**/*
+  - desktop/**/*.html
+  - package.json
+  - pnpm-lock.yaml
+
+npmRebuild: false
+
+asar: true
+asarUnpack:
+  - "**/*.node"
+  - "**/better-sqlite3/**"
+  - "node_modules/.pnpm/better-sqlite3*/**"
+
+win:
+  icon: resources/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 嘟嘟
+  installerIcon: resources/icon.png
+  uninstallerIcon: resources/icon.png
+  installerHeaderIcon: resources/icon.png
+
+extraResources:
+  - from: resources/
+    to: resources/
+    filter:
+      - "*.png"
+      - "*.ico"

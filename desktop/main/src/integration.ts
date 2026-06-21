@@ -15,6 +15,8 @@ import { ActiveWindowMonitor } from './awareness/active-window';
 import { BrowserURLExtractor } from './awareness/browser-url';
 import { PrivacySwitch } from './awareness/privacy-switch';
 import { ProactiveEngine } from './proactive/decision-engine';
+import { SettingsManager } from './settings-manager';
+import { HotkeyManager } from './hotkey-manager';
 import type { DeepSeekConfig } from '@dudu/chat-engine';
 
 export interface AppContext {
@@ -32,6 +34,8 @@ export interface AppContext {
   browserExtractor: BrowserURLExtractor;
   privacySwitch: PrivacySwitch;
   proactive: ProactiveEngine;
+  settingsManager: SettingsManager;
+  hotkeyManager: HotkeyManager;
 }
 
 export function createAppContext(): AppContext {
@@ -40,7 +44,6 @@ export function createAppContext(): AppContext {
   const dbPath = path.join(userDataPath, 'dudu.db');
   const db = new DuduDatabase({ dbPath });
 
-  // 运行数据库迁移
   runMigrations(db);
 
   const fileStore = new FileStore(path.join(userDataPath, 'files'));
@@ -49,7 +52,6 @@ export function createAppContext(): AppContext {
   const characterStore = new CharacterStore(db);
 
   // --- 3. AI 引擎 ---
-  // 从 config 表读取 API 配置，无则用默认值
   const apiKey = getConfig(db, 'api.key', '');
   const apiBaseUrl = getConfig(db, 'api.base_url', 'https://api.deepseek.com');
   const temperature = parseFloat(getConfig(db, 'api.temperature', '0.8'));
@@ -87,18 +89,35 @@ export function createAppContext(): AppContext {
     characterStore,
   );
 
-  // --- 7. 窗口管理 ---
-  const windowManager = new WindowManager();
+  // --- 7. 设置管理器 ---
+  const settingsManager = new SettingsManager(db);
 
-  // --- 8. 系统托盘 ---
+  // --- 8. 窗口管理 ---
+  const windowManager = new WindowManager();
+  windowManager.setDatabase(db);
+  windowManager.setSettingsManager(settingsManager);
+  settingsManager.setWindowManager(windowManager);
+  settingsManager.setAIClient(aiClient);
+
+  // --- 9. 系统托盘 ---
   const trayManager = new TrayManager({
-    onShow: () => windowManager.showBall(),
+    onShow: () => windowManager.showAll(),
     onHide: () => windowManager.hideBall(),
+    onOpenChat: () => windowManager.openChat(),
+    onOpenSettings: () => windowManager.openSettingsInternal(),
+    onRestart: () => { app.relaunch(); app.exit(0); },
     onQuit: () => app.quit(),
     onTogglePrivacy: () => {
       const newState = privacySwitch.toggle();
       trayManager.setPrivacyChecked(newState);
     },
+  });
+
+  // --- 10. 全局快捷键 ---
+  const hotkeyManager = new HotkeyManager({
+    toggleDudu: () => windowManager.toggleBall(),
+    toggleChat: () => windowManager.toggleChat(),
+    openSettings: () => windowManager.openSettingsInternal(),
   });
 
   return {
@@ -109,6 +128,8 @@ export function createAppContext(): AppContext {
     windowManager, trayManager,
     awareness, browserExtractor, privacySwitch,
     proactive,
+    settingsManager,
+    hotkeyManager,
   };
 }
 

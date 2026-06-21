@@ -1,8 +1,0 @@
-{
-  "name": "@dudu/mobile-webview",
-  "version": "0.1.0",
-  "private": true,
-  "dependencies": {
-    "@dudu/chat-ui": "*"
-  }
-}

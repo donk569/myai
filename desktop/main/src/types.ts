@@ -10,9 +10,9 @@ export interface WindowBounds {
   height: number;
 }
 
-export const FLOATING_BALL_SIZE = 80;
-export const CHAT_WINDOW_WIDTH = 360;
-export const CHAT_WINDOW_HEIGHT = 520;
+export const FLOATING_BALL_SIZE = 60;
+export const CHAT_WINDOW_WIDTH = 420;
+export const CHAT_WINDOW_HEIGHT = 600;
 
 export type SnapEdge = 'left' | 'right';
 export type Expression = 'smile' | 'thinking' | 'surprised' | 'sleepy' | 'excited' | 'normal';

@@ -1,14 +1,13 @@
 import { BrowserWindow, screen, ipcMain } from 'electron';
 import * as path from 'node:path';
 import { FLOATING_BALL_SIZE } from './types';
-import type { SnapEdge } from './types';
 
 export class FloatingBallManager {
   private window: BrowserWindow | null = null;
-  private snapEdge: SnapEdge = 'right';
-  private isDragging = false;
-  private dragStartPoint = { x: 0, y: 0 };
-  private windowStartPoint = { x: 0, y: 0 };
+  private snapEnabled = false;
+  public onMove: ((bounds: { x: number; y: number }) => void) | null = null;
+
+  setSnapEnabled(v: boolean): void { this.snapEnabled = v; }
 
   create(): BrowserWindow {
     const primaryDisplay = screen.getPrimaryDisplay();
@@ -17,43 +16,48 @@ export class FloatingBallManager {
     this.window = new BrowserWindow({
       width: FLOATING_BALL_SIZE,
       height: FLOATING_BALL_SIZE,
-      x: screenWidth - FLOATING_BALL_SIZE - 10,
+      x: screenWidth - FLOATING_BALL_SIZE - 20,
       y: Math.round(screenHeight / 2 - FLOATING_BALL_SIZE / 2),
       transparent: true,
       frame: false,
       alwaysOnTop: true,
       skipTaskbar: true,
       resizable: false,
+      show: false,
       hasShadow: false,
       type: 'toolbar',
       webPreferences: {
-        preload: path.join(__dirname, '..', '..', 'preload', 'floating-ball-preload.js'),
+        preload: path.join(__dirname, '..', 'preload', 'floating-ball-preload.js'),
         nodeIntegration: false,
         contextIsolation: true,
       },
     });
 
     this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+    // 防止白屏闪烁：HTML 加载完成后再显示
+    this.window.once('ready-to-show', () => {
+      this.window?.show();
+    });
+
     this.setupDragHandlers();
-    this.setupIPCHandlers();
+    console.log('[DUDU] Floating ball created');
     return this.window;
   }
 
-  getWindow(): BrowserWindow | null {
-    return this.window;
+  getWindow(): BrowserWindow | null { return this.window; }
+  getPosition(): { x: number; y: number } {
+    if (!this.window) return { x: 0, y: 0 };
+    const [x, y] = this.window.getPosition();
+    return { x, y };
+  }
+  getBounds(): { x: number; y: number; width: number; height: number } {
+    if (!this.window) return { x: 0, y: 0, width: 0, height: 0 };
+    return this.window.getBounds();
   }
 
-  getSnapEdge(): SnapEdge {
-    return this.snapEdge;
-  }
-
-  show(): void {
-    this.window?.show();
-  }
-
-  hide(): void {
-    this.window?.hide();
-  }
+  show(): void { this.window?.show(); }
+  hide(): void { this.window?.hide(); }
 
   setExpression(expression: string): void {
     this.window?.webContents.send('ball:set-expression', expression);
@@ -63,67 +67,48 @@ export class FloatingBallManager {
     this.window?.webContents.send('ball:show-bubble', { message, duration });
   }
 
-  destroy(): void {
-    this.window?.destroy();
-    this.window = null;
-  }
+  destroy(): void { this.window?.destroy(); this.window = null; }
 
+  // ===========================================================================
+  // 拖拽处理 — 增量移动，不吸边，自由停在任意位置
+  // ===========================================================================
   private setupDragHandlers(): void {
-    if (!this.window) return;
+    ipcMain.on('ball:move', (_event, data: { dx: number; dy: number }) => {
+      if (!this.window) return;
+      const [x, y] = this.window.getPosition();
+      const newX = x + Math.round(data.dx);
+      const newY = y + Math.round(data.dy);
 
-    // mousedown: 开始拖拽
-    this.window.webContents.on('ipc-message', (_event: unknown, channel: string) => {
-      if (channel === 'ball:drag-start') {
-        this.isDragging = true;
-        const bounds = this.window!.getBounds();
-        this.windowStartPoint = { x: bounds.x, y: bounds.y };
-        this.dragStartPoint = screen.getCursorScreenPoint();
-      }
+      // 边界约束：至少留 10px 在可视区域内
+      const display = screen.getDisplayNearestPoint({ x: newX, y: newY });
+      const { x: waX, y: waY, width: waW, height: waH } = display.workArea;
+      const clampedX = Math.max(waX - FLOATING_BALL_SIZE + 10, Math.min(waX + waW - 10, newX));
+      const clampedY = Math.max(waY - FLOATING_BALL_SIZE + 10, Math.min(waY + waH - 10, newY));
+
+      this.window.setPosition(clampedX, clampedY);
+
+      // 通知聊天窗跟随
+      const bounds = this.window.getBounds();
+      this.onMove?.(bounds);
     });
 
-    // 鼠标移动: 更新窗口位置
-    this.window.on('move', () => {
-      if (!this.isDragging) return;
-      const cursor = screen.getCursorScreenPoint();
-      const dx = cursor.x - this.dragStartPoint.x;
-      const dy = cursor.y - this.dragStartPoint.y;
-      this.windowStartPoint.x += dx;
-      this.windowStartPoint.y += dy;
-      this.dragStartPoint = cursor;
-      this.window?.setPosition(this.windowStartPoint.x, this.windowStartPoint.y);
-    });
-
-    // mouseup: 结束拖拽，吸边
+    // 拖拽结束 → 如果开启吸附则吸边
     ipcMain.on('ball:drag-end', () => {
-      if (!this.isDragging) return;
-      this.isDragging = false;
-      this.snapToEdge();
-    });
-  }
-
-  private setupIPCHandlers(): void {
-    ipcMain.on('ball:click', () => {
-      // 由 WindowManager 处理
+      console.log('[DUDU] Drag End (snap=' + this.snapEnabled + ')');
+      if (this.snapEnabled) this.snapToEdge();
     });
   }
 
   private snapToEdge(): void {
     if (!this.window) return;
     const bounds = this.window.getBounds();
-    const display = screen.getPrimaryDisplay();
-    const screenWidth = display.workAreaSize.width;
-    const centerX = screenWidth / 2;
-
-    const snapX = bounds.x + FLOATING_BALL_SIZE / 2 < centerX
-      ? 10
-      : screenWidth - FLOATING_BALL_SIZE - 10;
-
-    // 限制 Y 不出屏
-    const minY = 10;
-    const maxY = display.workAreaSize.height - FLOATING_BALL_SIZE - 10;
-    const snapY = Math.max(minY, Math.min(maxY, bounds.y));
-
-    this.snapEdge = snapX < centerX ? 'left' : 'right';
-    this.window.setPosition(snapX, snapY);
+    const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
+    const { x: waX, width: waW } = display.workArea;
+    const centerX = waX + waW / 2;
+    const ballCenterX = bounds.x + FLOATING_BALL_SIZE / 2;
+    const snapX = ballCenterX < centerX ? waX + 10 : waX + waW - FLOATING_BALL_SIZE - 10;
+    const minY = display.workArea.y + 10;
+    const maxY = display.workArea.y + display.workAreaSize.height - FLOATING_BALL_SIZE - 10;
+    this.window.setPosition(snapX, Math.max(minY, Math.min(maxY, bounds.y)));
   }
 }
